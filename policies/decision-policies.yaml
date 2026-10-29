@@ -1,0 +1,24 @@
+policies:
+  - name: duplicate_invoice
+    condition: confidence > 0.85
+    action: FLAG_FOR_REVIEW
+    risk_score: 7
+    recommendation: "Review both invoices and verify with vendor"
+    
+  - name: budget_overspend
+    condition: predicted_spend > budget * 1.1
+    action: SEND_ALERT
+    risk_score: 8
+    recommendation: "Hold non-essential purchases and review with finance team"
+    
+  - name: vendor_risk
+    condition: risk_score > 7
+    action: ESCALATE
+    risk_score: 6
+    recommendation: "Review vendor contract and consider alternate suppliers"
+    
+  - name: surplus_expense
+    condition: expense > average * 1.5
+    action: FLAG_FOR_REVIEW
+    risk_score: 5
+    recommendation: "Review expense reports and identify cost-saving opportunities"

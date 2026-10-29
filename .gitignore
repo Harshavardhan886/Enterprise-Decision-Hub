@@ -1,0 +1,44 @@
+# ============================================================
+# Enterprise Decision Hub — .gitignore
+# ============================================================
+
+# --- Secrets (NEVER commit) ---
+.env
+*.env.local
+*.env.production
+
+# --- Node / Frontend ---
+node_modules/
+frontend/node_modules/
+frontend/build/
+frontend/.env.local
+npm-debug.log*
+
+# --- Java / Maven ---
+backend/target/
+*.class
+*.jar
+*.war
+
+# --- Python / ML ---
+ml-service/__pycache__/
+ml-service/.venv/
+ml-service/model/*.pkl
+ml-service/model/model_info.json
+**/__pycache__/
+*.pyc
+*.pyo
+.venv/
+venv/
+
+# --- IDE ---
+.vscode/settings.json
+.idea/
+*.iml
+
+# --- OS ---
+.DS_Store
+Thumbs.db
+
+# --- Kiro sessions (never commit) ---
+.kiro/sessions/

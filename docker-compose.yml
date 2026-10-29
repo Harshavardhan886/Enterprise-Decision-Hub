@@ -1,0 +1,83 @@
+version: "3.8"
+
+services:
+  mongodb:
+    image: mongo:6
+    container_name: edh-mongo
+    ports:
+      - "27017:27017"
+    environment:
+      - MONGO_INITDB_ROOT_USERNAME=${MONGO_INITDB_ROOT_USERNAME:-edh_admin}
+      - MONGO_INITDB_ROOT_PASSWORD=${MONGO_INITDB_ROOT_PASSWORD:-edh_secure_mongo_pass_2026}
+      - MONGO_INITDB_DATABASE=${MONGO_DB:-enterprise_decision_hub}
+    volumes:
+      - mongo_data:/data/db
+    healthcheck:
+      test: ["CMD", "mongosh", "--eval", "db.adminCommand('ping')"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+    restart: unless-stopped
+
+  ml-service:
+    build:
+      context: ./ml-service
+      dockerfile: Dockerfile
+    container_name: edh-ml
+    expose:
+      - "8000"
+    environment:
+      - ML_INTERNAL_API_KEY=${ML_INTERNAL_API_KEY:-edh_internal_ml_key_8f92b7c4a1e9}
+    volumes:
+      - ml_models:/app/model
+    healthcheck:
+      test: ["CMD-SHELL", "python -c \"import urllib.request; urllib.request.urlopen('http://localhost:8000/')\" || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+    restart: unless-stopped
+
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: edh-backend
+    ports:
+      - "8080:8080"
+    depends_on:
+      mongodb:
+        condition: service_healthy
+      ml-service:
+        condition: service_healthy
+    environment:
+      - SPRING_DATA_MONGODB_URI=mongodb://${MONGO_INITDB_ROOT_USERNAME:-edh_admin}:${MONGO_INITDB_ROOT_PASSWORD:-edh_secure_mongo_pass_2026}@mongodb:27017/${MONGO_DB:-enterprise_decision_hub}?authSource=admin
+      - ML_SERVICE_URL=http://ml-service:8000
+      - ML_INTERNAL_API_KEY=${ML_INTERNAL_API_KEY:-edh_internal_ml_key_8f92b7c4a1e9}
+      - ADMIN_INVITE_KEY=${ADMIN_INVITE_KEY:-EDH-ADMIN-2026-KEY}
+      - JWT_SECRET=${JWT_SECRET:-e4a781b2c9df43a985e05c48b291d9e23fa7b12d5930e46b9a8f276182c4d9a1}
+      - JWT_EXPIRATION=${JWT_EXPIRATION:-86400000}
+      - CORS_ALLOWED_ORIGINS=${CORS_ALLOWED_ORIGINS:-http://localhost:3000,http://localhost:80,http://localhost,http://127.0.0.1:3000,http://127.0.0.1}
+    healthcheck:
+      test: ["CMD-SHELL", "curl -f http://localhost:8080/actuator/health || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 25s
+    restart: unless-stopped
+
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    container_name: edh-frontend
+    ports:
+      - "3000:80"
+    depends_on:
+      - backend
+    restart: unless-stopped
+
+volumes:
+  mongo_data:
+  ml_models:

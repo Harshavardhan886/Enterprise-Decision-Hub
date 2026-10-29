@@ -1,0 +1,442 @@
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&display=swap');
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* ========================================================
+   THEME DEFINITIONS & CSS VARIABLES (LIGHT & DARK ONLY)
+   ======================================================== */
+
+:root,
+[data-theme="dark"] {
+  --theme-id: 'dark';
+  --bg-app: #0b0f19;
+  --bg-canvas: #0b0f19;
+  --bg-card: #111827;
+  --bg-card-muted: #1e293b;
+  --bg-card-hover: #243247;
+  --border-color: #1f293d;
+  --border-color-subtle: rgba(255, 255, 255, 0.07);
+  --text-main: #f8fafc;
+  --text-muted: #94a3b8;
+  --text-subtle: #64748b;
+  --accent: #8b5cf6;
+  --accent-hover: #7c3aed;
+  --accent-light: rgba(139, 92, 246, 0.16);
+  --accent-border: rgba(139, 92, 246, 0.35);
+  --accent-contrast: #ffffff;
+  --nav-bg: rgba(17, 24, 39, 0.92);
+  --nav-border: #1f293d;
+  --input-bg: #0f172a;
+  --input-border: #334155;
+  --table-header-bg: #0f172a;
+  --table-row-hover: rgba(139, 92, 246, 0.05);
+  --shadow-card: 0 4px 20px -2px rgba(0, 0, 0, 0.5);
+  --font-heading: 'Helvetica Now Display Bold', 'Inter', sans-serif;
+  --font-body: 'Inter', sans-serif;
+}
+
+[data-theme="light"] {
+  --theme-id: 'light';
+  --bg-app: #f8fafc;
+  --bg-canvas: #f8fafc;
+  --bg-card: #ffffff;
+  --bg-card-muted: #f1f5f9;
+  --bg-card-hover: #e2e8f0;
+  --border-color: #e2e8f0;
+  --border-color-subtle: #f1f5f9;
+  --text-main: #0f172a;
+  --text-muted: #475569;
+  --text-subtle: #94a3b8;
+  --accent: #7342E2;
+  --accent-hover: #5e32c7;
+  --accent-light: rgba(115, 66, 226, 0.09);
+  --accent-border: rgba(115, 66, 226, 0.25);
+  --accent-contrast: #ffffff;
+  --nav-bg: rgba(255, 255, 255, 0.92);
+  --nav-border: #e2e8f0;
+  --input-bg: #ffffff;
+  --input-border: #cbd5e1;
+  --table-header-bg: #f8fafc;
+  --table-row-hover: rgba(115, 66, 226, 0.03);
+  --shadow-card: 0 1px 3px 0 rgba(15, 23, 42, 0.05);
+  --font-heading: 'Helvetica Now Display Bold', 'Inter', sans-serif;
+  --font-body: 'Inter', sans-serif;
+}
+
+/* ========================================================
+   GLOBAL BASE & RESET
+   ======================================================== */
+
+* {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+html, body {
+  min-height: 100%;
+  font-family: var(--font-body);
+  background-color: var(--bg-app);
+  color: var(--text-main);
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  transition: background-color 0.2s ease, color 0.2s ease;
+}
+
+/* Root Protected Container Override */
+[class*="min-h-screen"][class*="bg-[#F8F9FA]"] {
+  background-color: var(--bg-app) !important;
+  color: var(--text-main) !important;
+}
+
+/* ========================================================
+   CARDS, PANELS, AND CONTAINERS
+   ======================================================== */
+
+/* Main White Panels in Dark Mode */
+[data-theme="dark"] [class*="bg-white"] {
+  background-color: var(--bg-card) !important;
+  color: var(--text-main) !important;
+  border-color: var(--border-color) !important;
+}
+
+/* Secondary Panels / Filters / Summary Blocks */
+[data-theme="dark"] [class*="bg-[#F8F9FA]"],
+[data-theme="dark"] [class*="bg-[#F5F5F3]"],
+[data-theme="dark"] [class*="bg-[#F2F2EE]"] {
+  background-color: var(--bg-card-muted) !important;
+  color: var(--text-main) !important;
+}
+
+/* Light Mode Card Reset */
+[data-theme="light"] [class*="bg-white"] {
+  background-color: #ffffff !important;
+  color: #0f172a !important;
+  border-color: #e2e8f0 !important;
+}
+
+[data-theme="light"] [class*="bg-[#F8F9FA]"],
+[data-theme="light"] [class*="bg-[#F5F5F3]"],
+[data-theme="light"] [class*="bg-[#F2F2EE]"] {
+  background-color: #f1f5f9 !important;
+  color: #0f172a !important;
+}
+
+/* ========================================================
+   TEXT & HEADINGS
+   ======================================================== */
+
+/* Dark Mode Text Adaptations */
+[data-theme="dark"] [class*="text-[#192837]"] {
+  color: var(--text-main) !important;
+}
+
+[data-theme="dark"] [class*="text-[#192837]/60"],
+[data-theme="dark"] [class*="text-[#192837]/70"],
+[data-theme="dark"] [class*="text-[#192837]/80"] {
+  color: var(--text-muted) !important;
+}
+
+[data-theme="dark"] [class*="text-[#192837]/40"],
+[data-theme="dark"] [class*="text-[#192837]/50"] {
+  color: var(--text-subtle) !important;
+}
+
+[data-theme="dark"] .text-gray-900 {
+  color: var(--text-main) !important;
+}
+
+[data-theme="dark"] .text-gray-800,
+[data-theme="dark"] .text-gray-700,
+[data-theme="dark"] .text-gray-600 {
+  color: var(--text-muted) !important;
+}
+
+[data-theme="dark"] .text-gray-500,
+[data-theme="dark"] .text-gray-400 {
+  color: var(--text-subtle) !important;
+}
+
+/* Light Mode Text Adaptations */
+[data-theme="light"] [class*="text-[#192837]"] {
+  color: #0f172a !important;
+}
+
+[data-theme="light"] [class*="text-[#192837]/"] {
+  color: #475569 !important;
+}
+
+/* ========================================================
+   BORDERS
+   ======================================================== */
+
+[data-theme="dark"] [class*="border-[#192837]"],
+[data-theme="dark"] .border-gray-100,
+[data-theme="dark"] .border-gray-200 {
+  border-color: var(--border-color) !important;
+}
+
+[data-theme="light"] [class*="border-[#192837]"],
+[data-theme="light"] .border-gray-100,
+[data-theme="light"] .border-gray-200 {
+  border-color: #e2e8f0 !important;
+}
+
+/* ========================================================
+   ACCENTS, BUTTONS & BADGES (CRITICAL FIX FOR VISIBILITY)
+   ======================================================== */
+
+/* 1. Solid Primary Buttons / Active Pills */
+[class*="bg-[#7342E2]"]:not([class*="/"]):not([class*="selection"]) {
+  background-color: var(--accent) !important;
+  color: #ffffff !important;
+}
+
+[class*="bg-[#7342E2]"]:not([class*="/"]) * {
+  color: inherit !important;
+}
+
+/* 2. Tinted Pills, Badges & Icon Containers (e.g., bg-[#7342E2]/10, bg-[#7342E2]/15) */
+[class*="bg-[#7342E2]/"] {
+  background-color: var(--accent-light) !important;
+  color: var(--accent) !important;
+  border-color: var(--accent-border) !important;
+}
+
+[class*="bg-[#7342E2]/"] * {
+  color: inherit;
+}
+
+/* 3. Text and Border Accents */
+[class*="text-[#7342E2]"] {
+  color: var(--accent) !important;
+}
+
+[class*="border-[#7342E2]"] {
+  border-color: var(--accent-border) !important;
+}
+
+/* 4. Filter Buttons (e.g. Inactive Audit Log Filter / Model Selection Tabs) */
+[data-theme="dark"] button[class*="bg-[#F5F5F3]"],
+[data-theme="dark"] button[class*="bg-white"] {
+  background-color: #1e293b !important;
+  color: #e2e8f0 !important;
+  border-color: #334155 !important;
+}
+
+[data-theme="dark"] button[class*="bg-[#F5F5F3]"]:hover,
+[data-theme="dark"] button[class*="bg-white"]:hover {
+  background-color: #28374d !important;
+  color: #ffffff !important;
+}
+
+/* ========================================================
+   BADGES & STATUS PILLS (DARK MODE LEGIBILITY)
+   ======================================================== */
+
+[data-theme="dark"] .bg-gray-50 {
+  background-color: rgba(148, 163, 184, 0.14) !important;
+  color: #cbd5e1 !important;
+  border-color: rgba(148, 163, 184, 0.28) !important;
+}
+
+[data-theme="dark"] .bg-indigo-50 {
+  background-color: rgba(99, 102, 241, 0.16) !important;
+  color: #a5b4fc !important;
+  border-color: rgba(99, 102, 241, 0.35) !important;
+}
+
+[data-theme="dark"] .bg-purple-50 {
+  background-color: var(--accent-light) !important;
+  color: #c4b5fd !important;
+  border-color: var(--accent-border) !important;
+}
+
+[data-theme="dark"] .bg-violet-50 {
+  background-color: rgba(139, 92, 246, 0.16) !important;
+  color: #c4b5fd !important;
+  border-color: rgba(139, 92, 246, 0.35) !important;
+}
+
+[data-theme="dark"] .bg-emerald-50 {
+  background-color: rgba(16, 185, 129, 0.16) !important;
+  color: #6ee7b7 !important;
+  border-color: rgba(16, 185, 129, 0.35) !important;
+}
+
+[data-theme="dark"] .bg-red-50 {
+  background-color: rgba(239, 68, 68, 0.16) !important;
+  color: #fca5a5 !important;
+  border-color: rgba(239, 68, 68, 0.35) !important;
+}
+
+[data-theme="dark"] .bg-amber-50 {
+  background-color: rgba(245, 158, 11, 0.16) !important;
+  color: #fde68a !important;
+  border-color: rgba(245, 158, 11, 0.35) !important;
+}
+
+[data-theme="dark"] .bg-orange-50 {
+  background-color: rgba(249, 115, 22, 0.16) !important;
+  color: #fdba74 !important;
+  border-color: rgba(249, 115, 22, 0.35) !important;
+}
+
+[data-theme="dark"] .text-emerald-950,
+[data-theme="dark"] .text-emerald-800 {
+  color: #6ee7b7 !important;
+}
+
+[data-theme="dark"] .text-amber-950,
+[data-theme="dark"] .text-amber-800 {
+  color: #fde68a !important;
+}
+
+[data-theme="dark"] .text-orange-950,
+[data-theme="dark"] .text-orange-800 {
+  color: #fdba74 !important;
+}
+
+[data-theme="dark"] .text-red-950,
+[data-theme="dark"] .text-red-800 {
+  color: #fca5a5 !important;
+}
+
+/* ========================================================
+   HEADER & NAVBAR
+   ======================================================== */
+
+header {
+  background-color: var(--nav-bg) !important;
+  border-color: var(--nav-border) !important;
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+}
+
+/* Nav Item Inactive States */
+[data-theme="dark"] nav a:not([class*="bg-[#7342E2]"]) {
+  color: #94a3b8 !important;
+}
+
+[data-theme="dark"] nav a:not([class*="bg-[#7342E2]"]):hover {
+  color: #ffffff !important;
+  background-color: rgba(255, 255, 255, 0.06) !important;
+}
+
+/* User Profile Dropdown */
+[data-theme="dark"] [class*="shadow-xl"][class*="bg-white"] {
+  background-color: #1e293b !important;
+  border-color: #334155 !important;
+}
+
+/* ========================================================
+   TABLES (AUDIT LOG, INVOICES, VENDORS, BUDGETS)
+   ======================================================== */
+
+[data-theme="dark"] thead,
+[data-theme="dark"] thead tr,
+[data-theme="dark"] thead th {
+  background-color: var(--table-header-bg) !important;
+  color: var(--text-muted) !important;
+  border-color: var(--border-color) !important;
+}
+
+[data-theme="dark"] tbody tr:hover {
+  background-color: rgba(255, 255, 255, 0.03) !important;
+}
+
+[data-theme="dark"] td {
+  border-color: var(--border-color-subtle) !important;
+  color: var(--text-main) !important;
+}
+
+[data-theme="dark"] [class*="divide-"] {
+  border-color: var(--border-color-subtle) !important;
+}
+
+[data-theme="light"] thead,
+[data-theme="light"] thead tr,
+[data-theme="light"] thead th {
+  background-color: var(--table-header-bg) !important;
+  color: var(--text-muted) !important;
+  border-color: var(--border-color) !important;
+}
+
+[data-theme="light"] tbody tr:hover {
+  background-color: var(--table-row-hover) !important;
+}
+
+/* ========================================================
+   RECHARTS DATA VISUALIZATION STYLING
+   ======================================================== */
+
+[data-theme="dark"] .recharts-cartesian-axis-tick text {
+  fill: #94a3b8 !important;
+  font-size: 11px !important;
+}
+
+[data-theme="dark"] .recharts-cartesian-grid line {
+  stroke: rgba(255, 255, 255, 0.08) !important;
+}
+
+[data-theme="dark"] .recharts-cartesian-axis-line {
+  stroke: rgba(255, 255, 255, 0.15) !important;
+}
+
+[data-theme="dark"] .recharts-tooltip-cursor {
+  fill: rgba(255, 255, 255, 0.05) !important;
+}
+
+/* ========================================================
+   INPUTS, SELECTS, AND TEXTAREAS
+   ======================================================== */
+
+[data-theme="dark"] input:not([type="checkbox"]):not([type="radio"]),
+[data-theme="dark"] select,
+[data-theme="dark"] textarea {
+  background-color: var(--input-bg) !important;
+  border-color: var(--input-border) !important;
+  color: var(--text-main) !important;
+}
+
+[data-theme="dark"] input::placeholder,
+[data-theme="dark"] textarea::placeholder {
+  color: var(--text-subtle) !important;
+}
+
+[data-theme="light"] input:not([type="checkbox"]):not([type="radio"]),
+[data-theme="light"] select,
+[data-theme="light"] textarea {
+  background-color: #ffffff !important;
+  border-color: #cbd5e1 !important;
+  color: #0f172a !important;
+}
+
+[data-theme="light"] input::placeholder,
+[data-theme="light"] textarea::placeholder {
+  color: #94a3b8 !important;
+}
+
+/* ========================================================
+   AUTH PAGES (LOGIN / REGISTER AMBIENT VIDEO OVERLAYS)
+   ======================================================== */
+
+[data-theme="dark"] [class*="bg-[#F2F2EE]"] {
+  background-color: rgba(11, 15, 25, 0.9) !important;
+}
+
+[data-theme="light"] [class*="bg-[#F2F2EE]"] {
+  background-color: rgba(248, 250, 252, 0.92) !important;
+}
+
+/* Fallback font-face definition if webfont fails to load */
+@font-face {
+  font-family: 'Helvetica Now Display Bold';
+  src: url('https://db.onlinewebfonts.com/t/04e6981992c0e2e7642af2074ebe3901.woff2') format('woff2'),
+       url('https://db.onlinewebfonts.com/t/04e6981992c0e2e7642af2074ebe3901.woff') format('woff');
+  font-weight: bold;
+  font-style: normal;
+  font-display: swap;
+}
