@@ -1,21 +1,20 @@
 import axios from "axios";
 
 // Determine base API URL dynamically based on environment:
-// 1. Explicit env var (REACT_APP_API_URL) if specified
-// 2. Direct localhost:8080/api during standalone local npm start dev server on port 3000
-// 3. /api for production / Docker / Nginx reverse-proxied / remote cloud deployments
+// 1. Explicit production env var (REACT_APP_API_URL) if specified and not localhost
+// 2. Localhost:8081/api during local development on localhost:3000
+// 3. Fallback to production Render backend on Vercel or cloud
 const getBaseURL = () => {
-  if (process.env.REACT_APP_API_URL) {
+  if (process.env.REACT_APP_API_URL && !process.env.REACT_APP_API_URL.includes("localhost")) {
     return process.env.REACT_APP_API_URL;
   }
   if (
     typeof window !== "undefined" &&
-    (window.location.hostname === "localhost" || window.location.hostname === "127.0.0.1") &&
-    window.location.port === "3000"
+    (window.location.hostname === "localhost" || window.location.hostname === "127.0.0.1")
   ) {
-    return "http://localhost:8081/api";
+    return process.env.REACT_APP_API_URL || "http://localhost:8081/api";
   }
-  return "/api";
+  return process.env.REACT_APP_API_URL || "https://edh-backend-46pe.onrender.com/api";
 };
 
 const api = axios.create({
