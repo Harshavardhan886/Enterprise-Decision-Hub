@@ -31,10 +31,7 @@ services:
       - key: SPRING_DATA_MONGODB_URI
         sync: false
       - key: ML_SERVICE_URL
-        fromService:
-          type: web
-          name: edh-ml-service
-          property: host
+        value: https://edh-ml-service.onrender.com
       - key: ML_INTERNAL_API_KEY
         value: edh_internal_ml_key_8f92b7c4a1e9
       - key: ADMIN_INVITE_KEY

@@ -9,6 +9,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.web.client.RestTemplate;
 import org.springframework.web.client.RestClientException;
 
+import jakarta.annotation.PostConstruct;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
@@ -30,6 +31,20 @@ public class RiskScoringService {
         factory.setConnectTimeout(2500);
         factory.setReadTimeout(3500);
         this.restTemplate = new RestTemplate(factory);
+    }
+
+    @PostConstruct
+    public void normalizeMlUrl() {
+        if (mlServiceUrl != null) {
+            mlServiceUrl = mlServiceUrl.trim();
+            if (!mlServiceUrl.startsWith("http://") && !mlServiceUrl.startsWith("https://")) {
+                mlServiceUrl = "http://" + mlServiceUrl;
+            }
+            if (mlServiceUrl.endsWith("/")) {
+                mlServiceUrl = mlServiceUrl.substring(0, mlServiceUrl.length() - 1);
+            }
+        }
+        System.out.println(">>> [RiskScoringService] Normalized ML Service URL: " + mlServiceUrl);
     }
 
     public static class RiskAssessmentResult {
