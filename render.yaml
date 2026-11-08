@@ -1,0 +1,42 @@
+services:
+  # 1. Machine Learning Microservice (FastAPI + Scikit-learn + XGBoost + Isolation Forest)
+  - type: web
+    name: edh-ml-service
+    runtime: docker
+    dockerfilePath: ./ml-service/Dockerfile
+    dockerContext: ./ml-service
+    plan: free
+    region: oregon
+    healthCheckPath: /health
+    envVars:
+      - key: ML_INTERNAL_API_KEY
+        value: edh_internal_ml_key_8f92b7c4a1e9
+
+  # 2. Enterprise Decision Hub Backend (Spring Boot + SpEL Policy Engine)
+  - type: web
+    name: edh-backend
+    runtime: docker
+    dockerfilePath: ./backend/Dockerfile
+    dockerContext: ./backend
+    plan: free
+    region: oregon
+    healthCheckPath: /actuator/health
+    envVars:
+      - key: SPRING_DATA_MONGODB_URI
+        sync: false
+      - key: ML_SERVICE_URL
+        fromService:
+          type: web
+          name: edh-ml-service
+          property: host
+      - key: ML_INTERNAL_API_KEY
+        value: edh_internal_ml_key_8f92b7c4a1e9
+      - key: ADMIN_INVITE_KEY
+        value: EDH-ADMIN-2026-KEY
+      - key: JWT_SECRET
+        generateValue: true
+      - key: GEMINI_API_KEY
+        sync: false
+      - key: CORS_ALLOWED_ORIGINS
+        value: https://enterprise-decision-hub.vercel.app,http://localhost:3000,http://localhost:80,http://127.0.0.1:3000
+
