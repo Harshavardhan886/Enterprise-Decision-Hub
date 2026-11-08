@@ -23,4 +23,9 @@ public class AuditLogController {
     public List<AuditLog> getByEntityType(@PathVariable String entityType) {
         return auditLogService.getLogsByEntityType(entityType);
     }
+
+    @GetMapping("/verify")
+    public java.util.Map<String, Object> verifyLedgerIntegrity() {
+        return auditLogService.verifyLedgerIntegrity();
+    }
 }

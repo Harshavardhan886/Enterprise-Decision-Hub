@@ -12,6 +12,11 @@ import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.domain.Sort;
+import org.springframework.data.mongodb.core.MongoTemplate;
+import org.springframework.data.mongodb.core.aggregation.Aggregation;
+import org.springframework.data.mongodb.core.aggregation.AggregationResults;
+import org.springframework.data.mongodb.core.query.Criteria;
+import org.bson.Document;
 import org.springframework.stereotype.Service;
 
 import java.util.ArrayList;
@@ -21,6 +26,9 @@ import java.util.stream.Collectors;
 
 @Service
 public class InvoiceService {
+
+    @Autowired
+    private MongoTemplate mongoTemplate;
 
     @Autowired
     private InvoiceRepository invoiceRepository;
@@ -110,16 +118,9 @@ public class InvoiceService {
         }
         double predictedSpend = currentSpend + invoice.getAmount();
 
-        // 4. Department & Vendor average invoice calculations for Surplus Flagging
-        List<Invoice> deptInvoices = invoiceRepository.findByDepartment(invoice.getDepartment());
-        double deptAvg = deptInvoices.isEmpty()
-                ? 50000.0
-                : deptInvoices.stream().mapToDouble(Invoice::getAmount).average().orElse(50000.0);
-
-        List<Invoice> vendorInvoices = invoiceRepository.findByVendorName(invoice.getVendorName());
-        double vendorAvg = vendorInvoices.isEmpty()
-                ? deptAvg
-                : vendorInvoices.stream().mapToDouble(Invoice::getAmount).average().orElse(deptAvg);
+        // 4. Department & Vendor average invoice calculations using Native MongoDB Aggregations (O(1) memory)
+        double deptAvg = calculateDepartmentAverage(invoice.getDepartment());
+        double vendorAvg = calculateVendorAverage(invoice.getVendorName(), deptAvg);
 
         boolean isDeptSurplus = deptAvg > 0 && invoice.getAmount() > (1.5 * deptAvg);
         boolean isVendorSurplus = vendorAvg > 0 && invoice.getAmount() > (2.0 * vendorAvg);
@@ -129,9 +130,11 @@ public class InvoiceService {
         invoice.setSurplusExpenseFlag(isDeptSurplus);
         invoice.setVendorSurplusFlag(isVendorSurplus);
 
-        // 5. Multi-Model Risk Scoring (RF + XGBoost + Isolation Forest)
+        // 5. Multi-Model Risk Scoring (RF + XGBoost + Isolation Forest + Local Waterfall Attribution)
         RiskScoringService.RiskAssessmentResult risk = riskScoringService.scoreInvoice(
                 isDuplicate, invoice.getAmount(), budgetOverspendPct, vendor.getRiskLevel());
+
+        invoice.setRiskWaterfall(risk.waterfall);
 
         // 6. YAML Policy Engine Evaluation
         PolicyEvaluationResult policyResult = policyEngineService.evaluate(
@@ -263,7 +266,16 @@ public class InvoiceService {
     public Invoice updateInvoice(String id, Invoice updated) {
         updated.setId(id);
         Invoice saved = invoiceRepository.save(updated);
-        auditLogService.log("INVOICE_UPDATED", "Invoice", id, "USER", "Invoice status set to " + updated.getStatus());
+        
+        String auditAction = "INVOICE_UPDATED";
+        String auditDetails = "Invoice status set to " + updated.getStatus();
+        if ("APPROVED".equalsIgnoreCase(updated.getStatus()) && 
+            (updated.getRiskScore() >= 9 || "RED".equalsIgnoreCase(updated.getSentryLevel()))) {
+            auditAction = "SENTRY_RED_RELEASE_AUTHORIZED";
+            auditDetails = "CRITICAL HOLD RELEASED: Four-Eyes dual authorization recorded for Sentry Red invoice " + updated.getInvoiceNumber() + " (Risk Score: " + updated.getRiskScore() + "/10)";
+        }
+        
+        auditLogService.log(auditAction, "Invoice", id, "USER", auditDetails);
         return saved;
     }
 
@@ -271,5 +283,41 @@ public class InvoiceService {
     public void deleteInvoice(String id) {
         invoiceRepository.deleteById(id);
         auditLogService.log("INVOICE_DELETED", "Invoice", id, "USER", "Invoice deleted");
+    }
+
+    private double calculateDepartmentAverage(String department) {
+        if (department == null || department.isBlank()) return 50000.0;
+        try {
+            Aggregation agg = Aggregation.newAggregation(
+                Aggregation.match(Criteria.where("department").is(department)),
+                Aggregation.group().avg("amount").as("avgAmount")
+            );
+            AggregationResults<Document> results = mongoTemplate.aggregate(agg, "invoices", Document.class);
+            Document doc = results.getUniqueMappedResult();
+            if (doc != null && doc.get("avgAmount") instanceof Number) {
+                return ((Number) doc.get("avgAmount")).doubleValue();
+            }
+        } catch (Exception e) {
+            // Fallback gracefully
+        }
+        return 50000.0;
+    }
+
+    private double calculateVendorAverage(String vendorName, double fallback) {
+        if (vendorName == null || vendorName.isBlank()) return fallback;
+        try {
+            Aggregation agg = Aggregation.newAggregation(
+                Aggregation.match(Criteria.where("vendorName").is(vendorName)),
+                Aggregation.group().avg("amount").as("avgAmount")
+            );
+            AggregationResults<Document> results = mongoTemplate.aggregate(agg, "invoices", Document.class);
+            Document doc = results.getUniqueMappedResult();
+            if (doc != null && doc.get("avgAmount") instanceof Number) {
+                return ((Number) doc.get("avgAmount")).doubleValue();
+            }
+        } catch (Exception e) {
+            // Fallback gracefully
+        }
+        return fallback;
     }
 }

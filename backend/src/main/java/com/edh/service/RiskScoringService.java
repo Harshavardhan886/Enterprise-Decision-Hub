@@ -49,6 +49,7 @@ public class RiskScoringService {
         public String modelVersion = "v3.0-MultiModel";
         public Map<String, Object> featureImportances = new HashMap<>();
         public Map<String, Object> multiModelDetails = new HashMap<>();
+        public List<Map<String, Object>> waterfall = new ArrayList<>();
     }
 
     private HttpHeaders createAuthHeaders() {
@@ -116,6 +117,16 @@ public class RiskScoringService {
                     Map<?, ?> rfMap = (Map<?, ?>) rfObj;
                     if (rfMap.get("feature_importance") instanceof Map) {
                         result.featureImportances.putAll((Map<String, Object>) rfMap.get("feature_importance"));
+                    }
+                }
+            }
+
+            // Extract local waterfall feature attribution
+            Object waterfallObj = predictRes.get("waterfall");
+            if (waterfallObj instanceof List) {
+                for (Object item : (List<?>) waterfallObj) {
+                    if (item instanceof Map) {
+                        result.waterfall.add((Map<String, Object>) item);
                     }
                 }
             }

@@ -42,3 +42,6 @@ Thumbs.db
 
 # --- Kiro sessions (never commit) ---
 .kiro/sessions/
+
+# Local redesign backup + QA screenshots
+.backup/

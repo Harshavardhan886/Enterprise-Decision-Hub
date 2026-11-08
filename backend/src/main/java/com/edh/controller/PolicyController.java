@@ -10,6 +10,7 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.Authentication;
 import org.springframework.web.bind.annotation.*;
 
+import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -23,6 +24,9 @@ public class PolicyController {
 
     @Autowired
     private AuditLogService auditLogService;
+
+    @Autowired
+    private com.edh.repository.InvoiceRepository invoiceRepository;
 
     @GetMapping
     public ResponseEntity<Map<String, Object>> getPolicies() {
@@ -114,5 +118,80 @@ public class PolicyController {
                 req.average
         );
         return ResponseEntity.ok(result);
+    }
+
+    @PostMapping("/shadow-simulation")
+    public ResponseEntity<?> shadowSimulation(@RequestBody Map<String, String> body) {
+        String yaml = body.get("yaml");
+        List<DecisionPolicy> policyList;
+        try {
+            if (yaml != null && !yaml.isBlank()) {
+                policyList = policyEngineService.parsePoliciesFromYaml(yaml);
+            } else {
+                policyList = policyEngineService.getPolicies();
+            }
+        } catch (Exception e) {
+            return ResponseEntity.badRequest().body(Map.of("error", "Invalid YAML syntax: " + e.getMessage()));
+        }
+
+        List<Invoice> invoices = invoiceRepository.findAll();
+        int totalEvaluated = invoices.size();
+        int impactedCount = 0;
+        int flaggedCount = 0;
+        int escalatedCount = 0;
+        int alertCount = 0;
+        double totalHeldAmount = 0.0;
+        Map<String, Integer> policyHits = new HashMap<>();
+        List<Map<String, Object>> impactedInvoices = new ArrayList<>();
+
+        for (Invoice inv : invoices) {
+            PolicyEvaluationResult res = policyEngineService.evaluateWithPolicies(
+                    policyList,
+                    inv,
+                    inv.getMlRiskProbability() != null ? inv.getMlRiskProbability() : 0.0,
+                    inv.getAmount() * 1.05,
+                    100000.0,
+                    inv.getRiskScore(),
+                    inv.getDepartmentAverage() != null && inv.getDepartmentAverage() > 0 ? inv.getDepartmentAverage() : 50000.0
+            );
+
+            if (!res.getTriggeredPolicies().isEmpty()) {
+                impactedCount++;
+                String primaryAction = res.getPrimaryAction();
+                if ("FLAG_FOR_REVIEW".equalsIgnoreCase(primaryAction)) flaggedCount++;
+                if ("ESCALATE".equalsIgnoreCase(primaryAction)) escalatedCount++;
+                if ("SEND_ALERT".equalsIgnoreCase(primaryAction)) alertCount++;
+                totalHeldAmount += inv.getAmount();
+
+                List<String> matchedNames = new ArrayList<>();
+                for (PolicyEvaluationResult.MatchedPolicy mp : res.getTriggeredPolicies()) {
+                    matchedNames.add(mp.getName());
+                    policyHits.put(mp.getName(), policyHits.getOrDefault(mp.getName(), 0) + 1);
+                }
+
+                Map<String, Object> item = new HashMap<>();
+                item.put("invoiceNumber", inv.getInvoiceNumber());
+                item.put("vendorName", inv.getVendorName());
+                item.put("department", inv.getDepartment());
+                item.put("amount", inv.getAmount());
+                item.put("primaryAction", primaryAction);
+                item.put("highestRiskScore", res.getHighestRiskScore());
+                item.put("matchedPolicies", matchedNames);
+                impactedInvoices.add(item);
+            }
+        }
+
+        Map<String, Object> resp = new java.util.LinkedHashMap<>();
+        resp.put("totalEvaluated", totalEvaluated);
+        resp.put("impactedCount", impactedCount);
+        resp.put("flaggedCount", flaggedCount);
+        resp.put("escalatedCount", escalatedCount);
+        resp.put("alertCount", alertCount);
+        resp.put("totalHeldAmount", totalHeldAmount);
+        resp.put("policyHits", policyHits);
+        resp.put("impactedInvoices", impactedInvoices);
+        resp.put("rulesEvaluatedCount", policyList.size());
+        resp.put("status", "SUCCESS");
+        return ResponseEntity.ok(resp);
     }
 }

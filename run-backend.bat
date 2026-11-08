@@ -21,4 +21,8 @@ if exist "%~dp0.env" (
 SET "SERVER_PORT=8081"
 echo Starting Spring Boot backend on port 8081...
 cd /d "%~dp0backend"
-call "%MVN%" spring-boot:run -Dspring-boot.run.arguments=--server.port=8081
+if exist "target\enterprise-decision-hub-1.0.0.jar" (
+    java -jar target\enterprise-decision-hub-1.0.0.jar --server.port=8081
+) else (
+    call "%MVN%" spring-boot:run -Dspring-boot.run.arguments=--server.port=8081
+)

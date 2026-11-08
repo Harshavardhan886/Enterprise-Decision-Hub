@@ -65,6 +65,9 @@ public class Invoice {
     private String policyAction = "ALLOW";
     private Integer policyRiskScore = 0;
 
+    // Explainable AI: Local Waterfall Risk Attribution Breakdown
+    private List<java.util.Map<String, Object>> riskWaterfall = new ArrayList<>();
+
     public static String computeSentryLevel(int score) {
         if (score >= 9) return "RED";
         if (score >= 7) return "ORANGE";
@@ -159,4 +162,7 @@ public class Invoice {
     public void setPolicyAction(String policyAction) { this.policyAction = policyAction; }
     public Integer getPolicyRiskScore() { return policyRiskScore != null ? policyRiskScore : 0; }
     public void setPolicyRiskScore(Integer policyRiskScore) { this.policyRiskScore = policyRiskScore; }
+
+    public List<java.util.Map<String, Object>> getRiskWaterfall() { return riskWaterfall != null ? riskWaterfall : new ArrayList<>(); }
+    public void setRiskWaterfall(List<java.util.Map<String, Object>> riskWaterfall) { this.riskWaterfall = riskWaterfall; }
 }

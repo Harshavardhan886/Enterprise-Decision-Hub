@@ -1,35 +1,59 @@
-import React, { useEffect, useState } from "react";
-import {
-  Wallet,
-  PlusCircle,
-  Trash2,
-  AlertCircle,
-} from "lucide-react";
+import React, { useEffect, useMemo, useState } from "react";
+import { AlertCircle, PlusCircle, Trash2, TrendingDown, TrendingUp, Wallet } from "lucide-react";
 import api from "../services/api";
+import Alert from "../components/ui/Alert";
+import Button from "../components/ui/Button";
+import Card, { CardBody, CardHeader } from "../components/ui/Card";
 import ConfirmModal from "../components/ConfirmModal";
+import EmptyState from "../components/ui/EmptyState";
+import PageHeader, { MetaPill } from "../components/ui/PageHeader";
+import StatCard from "../components/ui/StatCard";
+import { Field, Input, Select } from "../components/ui/Field";
+import { Table, TBody, Td, Th, THead, Tr } from "../components/ui/Table";
 
-const ERR = "Cannot reach backend. Make sure it is running on port 8080.";
+const ERR = "Cannot reach the backend. Make sure it is running on port 8080.";
+const MONTHS = [
+  "January",
+  "February",
+  "March",
+  "April",
+  "May",
+  "June",
+  "July",
+  "August",
+  "September",
+  "October",
+  "November",
+  "December",
+];
+const DEPARTMENTS = ["Finance", "HR", "Operations", "Inventory", "Engineering", "Marketing"];
 
 export default function Budgets() {
-  const [budgets, setBudgets] = useState([]);
-  const [error, setError] = useState(null);
-  const [loading, setLoading] = useState(false);
-  const [deleteTarget, setDeleteTarget] = useState(null);
   const currentYear = new Date().getFullYear();
-  const [form, setForm] = useState({
+  const emptyForm = {
     department: "Finance",
     month: new Date().toLocaleString("default", { month: "long" }),
     year: currentYear,
     allocatedAmount: "",
     spentAmount: "",
-  });
+  };
+
+  const [budgets, setBudgets] = useState([]);
+  const [error, setError] = useState(null);
+  const [loading, setLoading] = useState(false);
+  const [deleteTarget, setDeleteTarget] = useState(null);
+  const [form, setForm] = useState(emptyForm);
   const [spendEdit, setSpendEdit] = useState({});
+
+  useEffect(() => {
+    document.title = "EDH — Budget Governance";
+  }, []);
 
   const load = () => {
     setError(null);
     api
       .get("/budgets")
-      .then((res) => setBudgets(res.data))
+      .then((res) => setBudgets(res.data || []))
       .catch(() => setError(ERR));
   };
 
@@ -37,24 +61,19 @@ export default function Budgets() {
     load();
   }, []);
 
-  const handleSubmit = async (e) => {
-    e.preventDefault();
+  const handleSubmit = async (event) => {
+    event.preventDefault();
     if (!form.allocatedAmount) return;
+
     setLoading(true);
     try {
       await api.post("/budgets", {
         ...form,
         allocatedAmount: parseFloat(form.allocatedAmount),
         spentAmount: parseFloat(form.spentAmount || 0),
-        year: parseInt(form.year),
+        year: parseInt(form.year, 10),
       });
-      setForm({
-        department: "Finance",
-        month: new Date().toLocaleString("default", { month: "long" }),
-        year: currentYear,
-        allocatedAmount: "",
-        spentAmount: "",
-      });
+      setForm({ ...emptyForm });
       load();
     } catch {
       setError(ERR);
@@ -64,14 +83,15 @@ export default function Budgets() {
   };
 
   const handleUpdateSpend = async (id) => {
-    const val = spendEdit[id];
-    if (val === undefined || val === "") return;
+    const value = spendEdit[id];
+    if (value === undefined || value === "") return;
+
     try {
-      await api.put(`/budgets/${id}/spend`, { spentAmount: parseFloat(val) });
-      setSpendEdit((prev) => {
-        const n = { ...prev };
-        delete n[id];
-        return n;
+      await api.put(`/budgets/${id}/spend`, { spentAmount: parseFloat(value) });
+      setSpendEdit((previous) => {
+        const next = { ...previous };
+        delete next[id];
+        return next;
       });
       load();
     } catch {
@@ -89,233 +109,232 @@ export default function Budgets() {
     }
   };
 
+  const totals = useMemo(() => {
+    const allocated = budgets.reduce((sum, b) => sum + (b.allocatedAmount || 0), 0);
+    const spent = budgets.reduce((sum, b) => sum + (b.spentAmount || 0), 0);
+    const overspending = budgets.filter((b) => b.allocatedAmount > 0 && b.spentAmount > b.allocatedAmount).length;
+    return { allocated, spent, overspending, remaining: allocated - spent };
+  }, [budgets]);
+
   return (
     <div className="space-y-6">
+      <PageHeader
+        eyebrow="Operations"
+        title="Budget Governance"
+        description="Track department allocations, monitor spend ratios and stop overspending before it clears."
+        actions={<MetaPill label="Budgets" value={budgets.length} />}
+      />
+
+      {error && <Alert tone="danger">{error}</Alert>}
+
+      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
+        <StatCard
+          label="Total allocated"
+          value={`₹${totals.allocated.toLocaleString()}`}
+          icon={Wallet}
+        />
+        <StatCard
+          label="Total spent"
+          value={`₹${totals.spent.toLocaleString()}`}
+          icon={TrendingUp}
+          tone="warning"
+        />
+        <StatCard
+          label="Remaining headroom"
+          value={`₹${totals.remaining.toLocaleString()}`}
+          icon={TrendingDown}
+          tone={totals.remaining < 0 ? "danger" : "success"}
+        />
+        <StatCard
+          label="Overspending budgets"
+          value={totals.overspending}
+          sub={`${budgets.length} tracked`}
+          icon={AlertCircle}
+          tone="danger"
+        />
+      </div>
+
+      <Card>
+        <CardBody>
+          <CardHeader
+            icon={PlusCircle}
+            title="Allocate department budget"
+            subtitle="Establish the governance limit that automated spend tracking measures against."
+          />
+
+          <form onSubmit={handleSubmit} className="mt-5 grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-6">
+            <Field label="Department" className="lg:col-span-1">
+              <Select
+                value={form.department}
+                onChange={(event) => setForm({ ...form, department: event.target.value })}
+              >
+                {DEPARTMENTS.map((department) => (
+                  <option key={department}>{department}</option>
+                ))}
+              </Select>
+            </Field>
+
+            <Field label="Month" className="lg:col-span-1">
+              <Select
+                value={form.month}
+                onChange={(event) => setForm({ ...form, month: event.target.value })}
+              >
+                {MONTHS.map((month) => (
+                  <option key={month}>{month}</option>
+                ))}
+              </Select>
+            </Field>
+
+            <Field label="Year" className="lg:col-span-1">
+              <Input
+                type="number"
+                value={form.year}
+                onChange={(event) => setForm({ ...form, year: event.target.value })}
+                required
+              />
+            </Field>
+
+            <Field label="Allocated (₹)" className="lg:col-span-1">
+              <Input
+                type="number"
+                placeholder="100000"
+                value={form.allocatedAmount}
+                onChange={(event) => setForm({ ...form, allocatedAmount: event.target.value })}
+                required
+              />
+            </Field>
+
+            <Field label="Initial spent (₹)" className="lg:col-span-1">
+              <Input
+                type="number"
+                placeholder="0"
+                value={form.spentAmount}
+                onChange={(event) => setForm({ ...form, spentAmount: event.target.value })}
+              />
+            </Field>
+
+            <div className="flex items-end lg:col-span-1">
+              <Button type="submit" icon={PlusCircle} loading={loading} fullWidth>
+                {loading ? "Allocating…" : "Save budget"}
+              </Button>
+            </div>
+          </form>
+        </CardBody>
+      </Card>
+
+      <Card className="overflow-hidden">
+        <Table>
+          <THead>
+            <Th>Department</Th>
+            <Th>Period</Th>
+            <Th className="text-right">Allocated</Th>
+            <Th className="text-right">Spent</Th>
+            <Th className="text-right">Remaining</Th>
+            <Th className="w-56">Utilisation</Th>
+            <Th>Update spend</Th>
+            <Th className="text-right">Delete</Th>
+          </THead>
+          <TBody>
+            {budgets.map((budget) => {
+              const percent =
+                budget.allocatedAmount > 0
+                  ? Math.round((budget.spentAmount / budget.allocatedAmount) * 100)
+                  : 0;
+              const isOver = percent > 100;
+              const isWarning = percent > 80 && !isOver;
+              const remaining = (budget.allocatedAmount || 0) - (budget.spentAmount || 0);
+
+              return (
+                <Tr key={budget.id}>
+                  <Td className="font-bold">{budget.department}</Td>
+                  <Td className="whitespace-nowrap text-xs text-ink-muted">
+                    {budget.month} {budget.year}
+                  </Td>
+                  <Td className="num text-right font-semibold">
+                    ₹{budget.allocatedAmount?.toLocaleString()}
+                  </Td>
+                  <Td className="num text-right font-semibold">
+                    ₹{budget.spentAmount?.toLocaleString()}
+                  </Td>
+                  <Td className={`num text-right font-semibold ${remaining < 0 ? "text-danger" : "text-success"}`}>
+                    ₹{remaining.toLocaleString()}
+                  </Td>
+                  <Td>
+                    <div className="flex items-center gap-2.5">
+                      <div className="h-1.5 flex-1 overflow-hidden rounded-full bg-surface-3">
+                        <div
+                          className={`h-full rounded-full transition-all ${
+                            isOver ? "bg-danger" : isWarning ? "bg-warning" : "bg-accent"
+                          }`}
+                          style={{ width: `${Math.min(percent, 100)}%` }}
+                        />
+                      </div>
+                      <span
+                        className={`num w-10 text-right text-xs font-bold ${
+                          isOver ? "text-danger" : "text-ink"
+                        }`}
+                      >
+                        {percent}%
+                      </span>
+                    </div>
+                  </Td>
+                  <Td>
+                    <div className="flex items-center gap-1.5">
+                      <Input
+                        type="number"
+                        size="sm"
+                        placeholder="New amount"
+                        aria-label={`Update spend for ${budget.department}`}
+                        value={spendEdit[budget.id] ?? ""}
+                        onChange={(event) =>
+                          setSpendEdit({ ...spendEdit, [budget.id]: event.target.value })
+                        }
+                        className="w-28"
+                      />
+                      <Button
+                        variant="subtle"
+                        size="sm"
+                        onClick={() => handleUpdateSpend(budget.id)}
+                      >
+                        Set
+                      </Button>
+                    </div>
+                  </Td>
+                  <Td className="text-right">
+                    <button
+                      type="button"
+                      onClick={() => setDeleteTarget(budget)}
+                      title="Delete budget"
+                      aria-label={`Delete ${budget.department} budget`}
+                      className="inline-flex h-8 w-8 items-center justify-center rounded-lg text-ink-subtle transition-colors hover:bg-danger/10 hover:text-danger"
+                    >
+                      <Trash2 size={15} />
+                    </button>
+                  </Td>
+                </Tr>
+              );
+            })}
+          </TBody>
+        </Table>
+
+        {budgets.length === 0 && (
+          <EmptyState
+            icon={Wallet}
+            title="No budgets created yet"
+            description="Allocate a department budget above to start enforcing automated spend limits."
+          />
+        )}
+      </Card>
+
       <ConfirmModal
-        isOpen={!!deleteTarget}
-        title="Delete Budget"
-        message={`Are you sure you want to delete the ${deleteTarget?.department} budget for ${deleteTarget?.month} ${deleteTarget?.year}? This cannot be undone.`}
-        confirmText="Delete Budget"
-        isDestructive={true}
+        isOpen={Boolean(deleteTarget)}
+        title="Delete budget"
+        message={`Delete the ${deleteTarget?.department} budget for ${deleteTarget?.month} ${deleteTarget?.year}? This cannot be undone.`}
+        confirmText="Delete budget"
+        isDestructive
         onConfirm={() => handleDelete(deleteTarget?.id)}
         onCancel={() => setDeleteTarget(null)}
       />
-      {/* Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-2 border-b border-[#192837]/8">
-        <div>
-          <h1
-            className="text-2xl sm:text-3xl font-extrabold text-[#192837] tracking-tight"
-            style={{ fontFamily: "var(--font-heading)" }}
-          >
-            Budget Governance
-          </h1>
-          <p className="text-sm text-[#192837]/70 mt-1">
-            Track department allocations, monitor spend ratios, and prevent overspending.
-          </p>
-        </div>
-        <div className="flex items-center gap-2">
-          <span className="text-xs font-semibold text-[#192837]/60 bg-white px-3 py-1.5 rounded-full border border-[#192837]/10 shadow-xs">
-            Allocated Budgets: <span className="text-[#192837] font-bold">{budgets.length}</span>
-          </span>
-        </div>
-      </div>
-
-      {error && (
-        <div className="p-4 rounded-xl bg-red-50 border border-red-200 text-red-700 text-xs font-medium flex items-center gap-2">
-          <AlertCircle size={16} />
-          <span>{error}</span>
-        </div>
-      )}
-
-      {/* Add Budget Card */}
-      <div className="bg-white/95 rounded-2xl border border-[#192837]/8 p-5 sm:p-6 shadow-[0_4px_20px_-4px_rgba(25,40,55,0.05)]">
-        <div className="flex items-center gap-2 mb-4">
-          <div className="w-8 h-8 rounded-xl bg-[#7342E2]/10 text-[#7342E2] flex items-center justify-center">
-            <PlusCircle size={18} />
-          </div>
-          <div>
-            <h2 className="text-base font-bold text-[#192837]">Allocate Department Budget</h2>
-            <p className="text-xs text-[#192837]/60">Establish governance limits for automated spend tracking</p>
-          </div>
-        </div>
-
-        <form onSubmit={handleSubmit} className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-6 gap-3.5 items-end">
-          <div>
-            <label className="block text-xs font-semibold text-[#192837] uppercase tracking-wider mb-1">
-              Department
-            </label>
-            <select
-              value={form.department}
-              onChange={(e) => setForm({ ...form, department: e.target.value })}
-              className="w-full px-3.5 py-2.5 bg-[#F5F5F3]/80 hover:bg-[#F5F5F3] focus:bg-white rounded-xl border border-[#192837]/10 focus:border-[#7342E2] focus:ring-4 focus:ring-[#7342E2]/15 text-[#192837] text-xs outline-none transition-all"
-            >
-              <option>Finance</option>
-              <option>HR</option>
-              <option>Operations</option>
-              <option>Inventory</option>
-              <option>Engineering</option>
-              <option>Marketing</option>
-            </select>
-          </div>
-
-          <div>
-            <label className="block text-xs font-semibold text-[#192837] uppercase tracking-wider mb-1">
-              Month
-            </label>
-            <select
-              value={form.month}
-              onChange={(e) => setForm({ ...form, month: e.target.value })}
-              className="w-full px-3.5 py-2.5 bg-[#F5F5F3]/80 hover:bg-[#F5F5F3] focus:bg-white rounded-xl border border-[#192837]/10 focus:border-[#7342E2] focus:ring-4 focus:ring-[#7342E2]/15 text-[#192837] text-xs outline-none transition-all"
-            >
-              {["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"].map((m) => (
-                <option key={m}>{m}</option>
-              ))}
-            </select>
-          </div>
-
-          <div>
-            <label className="block text-xs font-semibold text-[#192837] uppercase tracking-wider mb-1">
-              Year
-            </label>
-            <input
-              type="number"
-              value={form.year}
-              onChange={(e) => setForm({ ...form, year: e.target.value })}
-              required
-              className="w-full px-3.5 py-2.5 bg-[#F5F5F3]/80 hover:bg-[#F5F5F3] focus:bg-white rounded-xl border border-[#192837]/10 focus:border-[#7342E2] focus:ring-4 focus:ring-[#7342E2]/15 text-[#192837] text-xs outline-none transition-all"
-            />
-          </div>
-
-          <div>
-            <label className="block text-xs font-semibold text-[#192837] uppercase tracking-wider mb-1">
-              Allocated (₹)
-            </label>
-            <input
-              type="number"
-              placeholder="100000"
-              value={form.allocatedAmount}
-              onChange={(e) => setForm({ ...form, allocatedAmount: e.target.value })}
-              required
-              className="w-full px-3.5 py-2.5 bg-[#F5F5F3]/80 hover:bg-[#F5F5F3] focus:bg-white rounded-xl border border-[#192837]/10 focus:border-[#7342E2] focus:ring-4 focus:ring-[#7342E2]/15 text-[#192837] text-xs outline-none transition-all"
-            />
-          </div>
-
-          <div>
-            <label className="block text-xs font-semibold text-[#192837] uppercase tracking-wider mb-1">
-              Initial Spent (₹)
-            </label>
-            <input
-              type="number"
-              placeholder="0"
-              value={form.spentAmount}
-              onChange={(e) => setForm({ ...form, spentAmount: e.target.value })}
-              className="w-full px-3.5 py-2.5 bg-[#F5F5F3]/80 hover:bg-[#F5F5F3] focus:bg-white rounded-xl border border-[#192837]/10 focus:border-[#7342E2] focus:ring-4 focus:ring-[#7342E2]/15 text-[#192837] text-xs outline-none transition-all"
-            />
-          </div>
-
-          <div>
-            <button
-              type="submit"
-              disabled={loading}
-              className="w-full py-2.5 px-4 rounded-xl font-semibold text-xs text-white shadow-md shadow-[#7342E2]/25 hover:brightness-105 transition-all cursor-pointer disabled:opacity-60 flex items-center justify-center gap-1.5"
-              style={{ backgroundColor: "#7342E2" }}
-            >
-              <PlusCircle size={14} />
-              <span>{loading ? "Allocating..." : "Save Budget"}</span>
-            </button>
-          </div>
-        </form>
-      </div>
-
-      {/* Budgets Table */}
-      <div className="bg-white/95 rounded-2xl border border-[#192837]/8 shadow-[0_4px_20px_-4px_rgba(25,40,55,0.05)] overflow-hidden">
-        <div className="overflow-x-auto">
-          <table className="w-full text-left text-xs">
-            <thead className="bg-[#F5F5F3]/80 border-b border-[#192837]/8 text-[#192837]/60 uppercase font-semibold text-[11px] tracking-wider">
-              <tr>
-                <th className="px-5 py-3.5">Department</th>
-                <th className="px-5 py-3.5">Period</th>
-                <th className="px-5 py-3.5">Allocated</th>
-                <th className="px-5 py-3.5">Spent</th>
-                <th className="px-5 py-3.5">Remaining</th>
-                <th className="px-5 py-3.5 w-48">Utilisation</th>
-                <th className="px-5 py-3.5">Update Spend</th>
-                <th className="px-5 py-3.5 text-right">Delete</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-[#192837]/5 text-[#192837]">
-              {budgets.map((b) => {
-                const percent = b.allocatedAmount > 0 ? Math.round((b.spentAmount / b.allocatedAmount) * 100) : 0;
-                const isOver = percent > 100;
-                const remaining = (b.allocatedAmount || 0) - (b.spentAmount || 0);
-
-                return (
-                  <tr key={b.id} className="hover:bg-[#7342E2]/[0.02] transition-colors">
-                    <td className="px-5 py-4 font-bold text-[#192837]">{b.department}</td>
-                    <td className="px-5 py-4 text-[#192837]/70 font-medium">{b.month} {b.year}</td>
-                    <td className="px-5 py-4 font-semibold text-[#192837]">₹{b.allocatedAmount?.toLocaleString()}</td>
-                    <td className="px-5 py-4 font-semibold text-[#192837]">₹{b.spentAmount?.toLocaleString()}</td>
-                    <td className="px-5 py-4 font-semibold">
-                      <span className={remaining < 0 ? "text-red-600" : "text-emerald-600"}>
-                        ₹{remaining.toLocaleString()}
-                      </span>
-                    </td>
-                    <td className="px-5 py-4">
-                      <div className="flex items-center gap-2">
-                        <div className="flex-1 bg-[#F5F5F3] h-2 rounded-full overflow-hidden">
-                          <div
-                            className={`h-full rounded-full transition-all ${
-                              isOver ? "bg-red-500" : percent > 80 ? "bg-amber-500" : "bg-[#7342E2]"
-                            }`}
-                            style={{ width: `${Math.min(percent, 100)}%` }}
-                          />
-                        </div>
-                        <span className={`text-[11px] font-bold ${isOver ? "text-red-600" : "text-[#192837]"}`}>
-                          {percent}%
-                        </span>
-                      </div>
-                    </td>
-                    <td className="px-5 py-4">
-                      <div className="flex items-center gap-1.5">
-                        <input
-                          type="number"
-                          placeholder="New amount"
-                          value={spendEdit[b.id] ?? ""}
-                          onChange={(e) => setSpendEdit({ ...spendEdit, [b.id]: e.target.value })}
-                          className="w-24 px-2 py-1 text-xs rounded-lg border border-[#192837]/10 bg-[#F5F5F3] focus:bg-white focus:border-[#7342E2] outline-none"
-                        />
-                        <button
-                          onClick={() => handleUpdateSpend(b.id)}
-                          className="px-2.5 py-1 bg-[#7342E2]/10 text-[#7342E2] hover:bg-[#7342E2] hover:text-white rounded-lg text-xs font-semibold transition-colors"
-                        >
-                          Set
-                        </button>
-                      </div>
-                    </td>
-                    <td className="px-5 py-4 text-right">
-                      <button
-                        onClick={() => setDeleteTarget(b)}
-                        className="p-1.5 rounded-lg text-red-500 hover:bg-red-50 transition-colors"
-                        title="Delete budget"
-                      >
-                        <Trash2 size={16} />
-                      </button>
-                    </td>
-                  </tr>
-                );
-              })}
-              {budgets.length === 0 && (
-                <tr>
-                  <td colSpan={8} className="px-5 py-12 text-center text-[#192837]/50">
-                    <Wallet size={32} className="mx-auto mb-2 opacity-30" />
-                    <p className="font-medium">No budgets created yet</p>
-                  </td>
-                </tr>
-              )}
-            </tbody>
-          </table>
-        </div>
-      </div>
     </div>
   );
 }

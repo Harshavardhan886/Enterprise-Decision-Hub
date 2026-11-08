@@ -1,66 +1,63 @@
 import React from "react";
-import { ShieldAlert, ShieldCheck, AlertTriangle, Flame } from "lucide-react";
+import { AlertTriangle, Flame, ShieldAlert, ShieldCheck } from "lucide-react";
+import Badge from "./ui/Badge";
 
+/**
+ * Sentry risk bands shared by the dashboard, invoice table and alerts.
+ * 0–3 GREEN · 4–6 YELLOW · 7–8 ORANGE · 9–10 RED
+ */
 export function computeSentryLevel(score) {
-  const numericScore = typeof score === "number" ? score : 0;
+  const numericScore = typeof score === "number" ? score : Number(score) || 0;
   if (numericScore >= 9) return "RED";
   if (numericScore >= 7) return "ORANGE";
   if (numericScore >= 4) return "YELLOW";
   return "GREEN";
 }
 
+const LEVELS = {
+  RED: {
+    tone: "danger",
+    icon: Flame,
+    sentry: "RED",
+    plain: "Critical",
+    title: "Critical risk",
+  },
+  ORANGE: {
+    tone: "orange",
+    icon: ShieldAlert,
+    sentry: "ORANGE",
+    plain: "High",
+    title: "High risk",
+  },
+  YELLOW: {
+    tone: "warning",
+    icon: AlertTriangle,
+    sentry: "YELLOW",
+    plain: "Medium",
+    title: "Medium risk",
+  },
+  GREEN: {
+    tone: "success",
+    icon: ShieldCheck,
+    sentry: "GREEN",
+    plain: "Low",
+    title: "Low risk",
+  },
+};
+
 export default function RiskBadge({ score, sentryLevel, showSentry = true }) {
-  const numericScore = typeof score === "number" ? score : 0;
-  const level = sentryLevel || computeSentryLevel(numericScore);
+  const numericScore = typeof score === "number" ? score : Number(score) || 0;
+  const level = String(sentryLevel || computeSentryLevel(numericScore)).toUpperCase();
+  const config = LEVELS[level] || LEVELS.GREEN;
 
-  switch (level.toUpperCase()) {
-    case "RED":
-      return (
-        <span
-          className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-bold bg-red-100 text-red-800 border border-red-300 shadow-sm"
-          title={`Critical Risk - Sentry RED (Score: ${numericScore}/10)`}
-        >
-          <Flame size={13} className="text-red-600 animate-pulse" />
-          <span>{showSentry ? "RED" : "Critical"}</span>
-          <span className="text-red-500 font-normal">({numericScore}/10)</span>
-        </span>
-      );
-
-    case "ORANGE":
-      return (
-        <span
-          className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-bold bg-orange-100 text-orange-800 border border-orange-300 shadow-sm"
-          title={`High Risk - Sentry ORANGE (Score: ${numericScore}/10)`}
-        >
-          <ShieldAlert size={13} className="text-orange-600" />
-          <span>{showSentry ? "ORANGE" : "High"}</span>
-          <span className="text-orange-500 font-normal">({numericScore}/10)</span>
-        </span>
-      );
-
-    case "YELLOW":
-      return (
-        <span
-          className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-bold bg-amber-100 text-amber-800 border border-amber-300 shadow-sm"
-          title={`Medium Risk - Sentry YELLOW (Score: ${numericScore}/10)`}
-        >
-          <AlertTriangle size={13} className="text-amber-600" />
-          <span>{showSentry ? "YELLOW" : "Medium"}</span>
-          <span className="text-amber-500 font-normal">({numericScore}/10)</span>
-        </span>
-      );
-
-    case "GREEN":
-    default:
-      return (
-        <span
-          className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-bold bg-emerald-100 text-emerald-800 border border-emerald-300 shadow-sm"
-          title={`Low Risk - Sentry GREEN (Score: ${numericScore}/10)`}
-        >
-          <ShieldCheck size={13} className="text-emerald-600" />
-          <span>{showSentry ? "GREEN" : "Low"}</span>
-          <span className="text-emerald-500 font-normal">({numericScore}/10)</span>
-        </span>
-      );
-  }
+  return (
+    <Badge
+      tone={config.tone}
+      icon={config.icon}
+      title={`${config.title} — Sentry ${config.sentry} (score ${numericScore}/10)`}
+    >
+      <span>{showSentry ? config.sentry : config.plain}</span>
+      <span className="num font-medium opacity-70">{numericScore}/10</span>
+    </Badge>
+  );
 }

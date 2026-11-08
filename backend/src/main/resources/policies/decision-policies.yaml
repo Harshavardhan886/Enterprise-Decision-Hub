@@ -3,10 +3,10 @@ policies:
     condition: confidence > 0.85
     action: FLAG_FOR_REVIEW
     risk_score: 7
-    recommendation: "Review both invoices and verify with vendor"
+    recommendation: "Review both invoices and verify duplicate submission with vendor"
     
   - name: budget_overspend
-    condition: predicted_spend > budget * 1.1
+    condition: predicted_spend > budget * 1.1 && expense > 1000
     action: SEND_ALERT
     risk_score: 8
     recommendation: "Hold non-essential purchases and review with finance team"

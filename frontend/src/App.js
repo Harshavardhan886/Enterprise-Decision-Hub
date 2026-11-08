@@ -1,5 +1,5 @@
 import React from "react";
-import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
+import { BrowserRouter, Navigate, Route, Routes } from "react-router-dom";
 import { AuthProvider } from "./context/AuthContext";
 import { ThemeProvider } from "./context/ThemeContext";
 import ProtectedRoute from "./components/ProtectedRoute";
@@ -15,83 +15,45 @@ import AuditLog from "./pages/AuditLog";
 import Reports from "./pages/Reports";
 import Policies from "./pages/Policies";
 
+const PUBLIC_ROUTES = [
+  { path: "/", element: <Landing /> },
+  { path: "/login", element: <Login /> },
+  { path: "/register", element: <Register /> },
+];
+
+const PRIVATE_ROUTES = [
+  { path: "/dashboard", element: <Dashboard /> },
+  { path: "/invoices", element: <Invoices /> },
+  { path: "/budgets", element: <Budgets /> },
+  { path: "/vendors", element: <Vendors /> },
+  { path: "/alerts", element: <Alerts /> },
+  { path: "/audit-log", element: <AuditLog /> },
+  { path: "/reports", element: <Reports /> },
+  { path: "/policies", element: <Policies /> },
+];
+
 export default function App() {
   return (
     <ThemeProvider>
       <AuthProvider>
         <BrowserRouter>
-        <Routes>
-          <Route path="/" element={<Landing />} />
-          <Route path="/login" element={<Login />} />
-          <Route path="/register" element={<Register />} />
-          <Route
-            path="/dashboard"
-            element={
-              <ProtectedRoute>
-                <Dashboard />
-              </ProtectedRoute>
-            }
-          />
-          <Route
-            path="/invoices"
-            element={
-              <ProtectedRoute>
-                <Invoices />
-              </ProtectedRoute>
-            }
-          />
-          <Route
-            path="/budgets"
-            element={
-              <ProtectedRoute>
-                <Budgets />
-              </ProtectedRoute>
-            }
-          />
-          <Route
-            path="/vendors"
-            element={
-              <ProtectedRoute>
-                <Vendors />
-              </ProtectedRoute>
-            }
-          />
-          <Route
-            path="/alerts"
-            element={
-              <ProtectedRoute>
-                <Alerts />
-              </ProtectedRoute>
-            }
-          />
-          <Route
-            path="/audit-log"
-            element={
-              <ProtectedRoute>
-                <AuditLog />
-              </ProtectedRoute>
-            }
-          />
-          <Route
-            path="/reports"
-            element={
-              <ProtectedRoute>
-                <Reports />
-              </ProtectedRoute>
-            }
-          />
-          <Route
-            path="/policies"
-            element={
-              <ProtectedRoute>
-                <Policies />
-              </ProtectedRoute>
-            }
-          />
-          <Route path="*" element={<Navigate to="/" replace />} />
-        </Routes>
-      </BrowserRouter>
-    </AuthProvider>
-  </ThemeProvider>
+          <Routes>
+            {PUBLIC_ROUTES.map((route) => (
+              <Route key={route.path} path={route.path} element={route.element} />
+            ))}
+
+            {PRIVATE_ROUTES.map((route) => (
+              <Route
+                key={route.path}
+                path={route.path}
+                element={<ProtectedRoute>{route.element}</ProtectedRoute>}
+              />
+            ))}
+
+            <Route path="*" element={<Navigate to="/" replace />} />
+          </Routes>
+        </BrowserRouter>
+      </AuthProvider>
+    </ThemeProvider>
   );
 }

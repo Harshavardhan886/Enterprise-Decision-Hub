@@ -1,21 +1,17 @@
 import React, { useState } from "react";
-import { useNavigate, Link } from "react-router-dom";
-import { motion } from "framer-motion";
-import {
-  Lock,
-  User,
-  Eye,
-  EyeOff,
-  ArrowRight,
-  ArrowLeft,
-  ShieldCheck,
-  CheckCircle2,
-  Key,
-} from "lucide-react";
-import Logo from "../components/Logo";
-import ThemeSwitcher from "../components/ThemeSwitcher";
+import { Link, useNavigate } from "react-router-dom";
+import { ArrowRight, CheckCircle2, Eye, EyeOff, Key, Lock, ShieldCheck, User } from "lucide-react";
 import api from "../services/api";
 import { useAuth } from "../context/AuthContext";
+import AuthLayout from "../components/layout/AuthLayout";
+import Alert from "../components/ui/Alert";
+import Button from "../components/ui/Button";
+import { Field, Input } from "../components/ui/Field";
+
+const ROLES = [
+  { value: "VIEWER", title: "Viewer / analyst", description: "Monitor risk and audit invoices" },
+  { value: "ADMIN", title: "Admin (invite only)", description: "Full system governance" },
+];
 
 export default function Register() {
   const [username, setUsername] = useState("");
@@ -28,8 +24,9 @@ export default function Register() {
   const { login } = useAuth();
   const navigate = useNavigate();
 
-  const handleSubmit = async (e) => {
-    e.preventDefault();
+  const handleSubmit = async (event) => {
+    event.preventDefault();
+
     if (!username.trim() || !password.trim()) {
       setError("Please fill in all required fields");
       return;
@@ -42,13 +39,13 @@ export default function Register() {
       setError("Admin Invite Key is required to create an Admin account");
       return;
     }
+
     setError("");
     setLoading(true);
     try {
       const payload = { username, password, role };
-      if (role === "ADMIN") {
-        payload.inviteKey = inviteKey.trim();
-      }
+      if (role === "ADMIN") payload.inviteKey = inviteKey.trim();
+
       const res = await api.post("/auth/register", payload);
       login(res.data);
       navigate("/dashboard");
@@ -66,277 +63,134 @@ export default function Register() {
   };
 
   return (
-    <div
-      className="relative w-full min-h-screen overflow-x-hidden flex flex-col justify-between"
-      style={{
-        fontFamily: "var(--font-body)",
-        color: "var(--color-text)",
-      }}
+    <AuthLayout
+      badge="Governance access control"
+      footerNote="Role-based access control keeps viewer and administrator capabilities separate."
     >
-      {/* Background Fullscreen Video */}
-      <video
-        autoPlay
-        muted
-        loop
-        playsInline
-        className="absolute inset-0 w-full h-full object-cover pointer-events-none z-0"
-        src="https://d8j0ntlcm91z4.cloudfront.net/user_38xzZboKViGWJOttwIXH07lWA1P/hf_20260518_003132_8b7edcb6-c64d-4a52-a9ca-879942e122ad.mp4"
-      />
+      <div className="mb-7">
+        <span className="mb-3 inline-flex h-11 w-11 items-center justify-center rounded-2xl bg-accent/10 text-accent">
+          <ShieldCheck size={22} />
+        </span>
+        <h1 className="text-2xl font-extrabold tracking-tight text-ink">Create an account</h1>
+        <p className="mt-1 text-sm text-ink-muted">
+          Join the Enterprise Decision Hub risk governance platform.
+        </p>
+      </div>
 
-      {/* Subtle Ambient Overlay */}
-      <div className="absolute inset-0 bg-[#F2F2EE]/40 backdrop-blur-[2px] pointer-events-none z-0" />
+      {error && (
+        <Alert tone="danger" className="mb-5">
+          {error}
+        </Alert>
+      )}
 
-      {/* Top Header Navigation */}
-      <header className="relative z-20 w-full">
-        <nav className="max-w-[1280px] mx-auto px-5 sm:px-8 py-4 sm:py-5 flex items-center justify-between">
-          {/* Logo */}
-          <div
-            onClick={() => navigate("/")}
-            className="flex items-center gap-3 cursor-pointer transition-opacity hover:opacity-80 focus:outline-none"
-          >
-            <Logo />
-            <div className="flex flex-col">
-              <span
-                className="text-lg font-bold tracking-tight text-[#192837] leading-tight"
-                style={{ fontFamily: "var(--font-heading)" }}
-              >
-                Enterprise Decision Hub
-              </span>
-              <span className="text-[10px] font-semibold tracking-wider text-[#192837]/70 uppercase">
-                AI Risk & Governance
-              </span>
-            </div>
+      <form onSubmit={handleSubmit} className="space-y-4">
+        <Field label="Username" htmlFor="username">
+          <div className="relative">
+            <User
+              size={17}
+              className="pointer-events-none absolute left-3.5 top-1/2 -translate-y-1/2 text-ink-subtle"
+            />
+            <Input
+              id="username"
+              type="text"
+              required
+              value={username}
+              onChange={(event) => setUsername(event.target.value)}
+              placeholder="e.g. alex.chen"
+              className="pl-10"
+              autoComplete="username"
+            />
           </div>
+        </Field>
 
-          {/* Right Action: Theme Switcher & Back to Home */}
-          <div className="flex items-center gap-2.5">
-            <ThemeSwitcher />
-            <Link
-              to="/"
-              className="flex items-center gap-2 text-sm font-medium text-[#192837] px-4 py-2 rounded-full border border-[#192837]/10 bg-white/70 backdrop-blur-md hover:bg-white transition-all shadow-sm"
+        <Field label="Password" htmlFor="password" hint="Minimum 6 characters">
+          <div className="relative">
+            <Lock
+              size={17}
+              className="pointer-events-none absolute left-3.5 top-1/2 -translate-y-1/2 text-ink-subtle"
+            />
+            <Input
+              id="password"
+              type={showPassword ? "text" : "password"}
+              required
+              value={password}
+              onChange={(event) => setPassword(event.target.value)}
+              placeholder="At least 6 characters"
+              className="pl-10 pr-11"
+              autoComplete="new-password"
+            />
+            <button
+              type="button"
+              onClick={() => setShowPassword(!showPassword)}
+              aria-label={showPassword ? "Hide password" : "Show password"}
+              className="absolute right-3 top-1/2 -translate-y-1/2 text-ink-subtle transition-colors hover:text-ink"
             >
-              <ArrowLeft size={16} />
-              <span>Back to Home</span>
-            </Link>
+              {showPassword ? <EyeOff size={17} /> : <Eye size={17} />}
+            </button>
           </div>
-        </nav>
-      </header>
+        </Field>
 
-      {/* Main Register Card Section */}
-      <main className="relative z-10 w-full flex-grow flex items-center justify-center px-4 py-8">
-        <motion.div
-          initial={{ opacity: 0, y: 20, scale: 0.98 }}
-          animate={{ opacity: 1, y: 0, scale: 1 }}
-          transition={{ duration: 0.5, ease: [0.22, 1, 0.36, 1] }}
-          className="w-full max-w-[460px] bg-white/90 backdrop-blur-xl border border-white/80 rounded-[28px] shadow-2xl shadow-[#7342E2]/10 p-7 sm:p-9"
-        >
-          {/* Card Header */}
-          <div className="text-center mb-6">
-            <div className="inline-flex items-center justify-center w-12 h-12 rounded-2xl bg-[#7342E2]/10 text-[#7342E2] mb-3">
-              <ShieldCheck size={24} />
-            </div>
-            <h1
-              className="text-2xl sm:text-3xl font-bold text-[#192837] tracking-tight"
-              style={{ fontFamily: "var(--font-heading)" }}
-            >
-              Create an Account
-            </h1>
-            <p className="text-sm text-[#192837]/70 mt-1">
-              Join Enterprise Decision Hub risk governance
-            </p>
-          </div>
-
-          {/* Error Message */}
-          {error && (
-            <motion.div
-              initial={{ opacity: 0, y: -8 }}
-              animate={{ opacity: 1, y: 0 }}
-              className="mb-5 p-3.5 rounded-xl bg-red-50 border border-red-200/80 text-red-600 text-xs font-medium flex items-start gap-2"
-            >
-              <span className="w-1.5 h-1.5 rounded-full bg-red-500 mt-1.5 flex-shrink-0" />
-              <span>{error}</span>
-            </motion.div>
-          )}
-
-          {/* Form */}
-          <form onSubmit={handleSubmit} className="space-y-4">
-            {/* Username Input */}
-            <div>
-              <label
-                htmlFor="username"
-                className="block text-xs font-semibold text-[#192837] mb-1.5 uppercase tracking-wider"
-              >
-                Username
-              </label>
-              <div className="relative">
-                <div className="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none text-[#192837]/40">
-                  <User size={18} />
-                </div>
-                <input
-                  id="username"
-                  type="text"
-                  required
-                  value={username}
-                  onChange={(e) => setUsername(e.target.value)}
-                  placeholder="e.g. alex.chen"
-                  className="w-full pl-10 pr-4 py-3 bg-[#F5F5F3]/80 border border-[#192837]/10 rounded-xl text-[#192837] placeholder-[#192837]/40 text-sm focus:outline-none focus:ring-2 focus:ring-[#7342E2]/30 focus:border-[#7342E2] focus:bg-white transition-all"
-                />
-              </div>
-            </div>
-
-            {/* Password Input */}
-            <div>
-              <label
-                htmlFor="password"
-                className="block text-xs font-semibold text-[#192837] mb-1.5 uppercase tracking-wider"
-              >
-                Password
-              </label>
-              <div className="relative">
-                <div className="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none text-[#192837]/40">
-                  <Lock size={18} />
-                </div>
-                <input
-                  id="password"
-                  type={showPassword ? "text" : "password"}
-                  required
-                  value={password}
-                  onChange={(e) => setPassword(e.target.value)}
-                  placeholder="At least 6 characters"
-                  className="w-full pl-10 pr-11 py-3 bg-[#F5F5F3]/80 border border-[#192837]/10 rounded-xl text-[#192837] placeholder-[#192837]/40 text-sm focus:outline-none focus:ring-2 focus:ring-[#7342E2]/30 focus:border-[#7342E2] focus:bg-white transition-all"
-                />
+        <div>
+          <span className="label">Account access level</span>
+          <div className="grid grid-cols-2 gap-2.5">
+            {ROLES.map((option) => {
+              const selected = role === option.value;
+              return (
                 <button
+                  key={option.value}
                   type="button"
-                  onClick={() => setShowPassword(!showPassword)}
-                  className="absolute inset-y-0 right-0 pr-3.5 flex items-center text-[#192837]/40 hover:text-[#192837] transition-colors focus:outline-none"
-                  aria-label={showPassword ? "Hide password" : "Show password"}
+                  onClick={() => setRole(option.value)}
+                  aria-pressed={selected}
+                  className={`rounded-xl border p-3 text-left transition-all ${
+                    selected
+                      ? "border-accent bg-accent/[0.08] ring-2 ring-accent/20"
+                      : "border-line bg-surface-2 hover:border-line-strong"
+                  }`}
                 >
-                  {showPassword ? <EyeOff size={18} /> : <Eye size={18} />}
+                  <span className="flex items-center justify-between">
+                    <span className="text-xs font-semibold text-ink">{option.title}</span>
+                    {selected && <CheckCircle2 size={15} className="text-accent" />}
+                  </span>
+                  <span className="mt-0.5 block text-[10px] leading-tight text-ink-muted">
+                    {option.description}
+                  </span>
                 </button>
-              </div>
-            </div>
-
-            {/* Role Selector */}
-            <div>
-              <label className="block text-xs font-semibold text-[#192837] mb-1.5 uppercase tracking-wider">
-                Account Access Level
-              </label>
-              <div className="grid grid-cols-2 gap-2.5">
-                {[
-                  {
-                    value: "VIEWER",
-                    title: "Viewer / Analyst",
-                    desc: "Monitor Risk & Audit Invoices",
-                  },
-                  {
-                    value: "ADMIN",
-                    title: "Admin (Invite Only)",
-                    desc: "Full System Governance",
-                  },
-                ].map((r) => {
-                  const isSelected = role === r.value;
-                  return (
-                    <div
-                      key={r.value}
-                      onClick={() => setRole(r.value)}
-                      className={`cursor-pointer p-3 rounded-xl border text-left transition-all select-none ${
-                        isSelected
-                          ? "border-[#7342E2] bg-[#7342E2]/10 ring-2 ring-[#7342E2]/20"
-                          : "border-[#192837]/10 bg-[#F5F5F3]/60 hover:bg-[#F5F5F3]"
-                      }`}
-                    >
-                      <div className="flex items-center justify-between mb-0.5">
-                        <span className="font-semibold text-xs text-[#192837]">
-                          {r.title}
-                        </span>
-                        {isSelected && (
-                          <CheckCircle2 size={15} className="text-[#7342E2]" />
-                        )}
-                      </div>
-                      <p className="text-[10px] text-[#192837]/60 leading-tight">
-                        {r.desc}
-                      </p>
-                    </div>
-                  );
-                })}
-              </div>
-            </div>
-
-            {/* Admin Invite Key (Only when Admin is selected) */}
-            {role === "ADMIN" && (
-              <motion.div
-                initial={{ opacity: 0, height: 0 }}
-                animate={{ opacity: 1, height: "auto" }}
-                exit={{ opacity: 0, height: 0 }}
-              >
-                <label
-                  htmlFor="inviteKey"
-                  className="block text-xs font-semibold text-[#192837] mb-1.5 uppercase tracking-wider"
-                >
-                  Admin Invite Key
-                </label>
-                <div className="relative">
-                  <div className="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none text-[#192837]/40">
-                    <Key size={16} />
-                  </div>
-                  <input
-                    id="inviteKey"
-                    type="password"
-                    required
-                    value={inviteKey}
-                    onChange={(e) => setInviteKey(e.target.value)}
-                    placeholder="Enter security admin invite key"
-                    className="w-full pl-10 pr-4 py-2.5 bg-[#F5F5F3]/80 border border-[#7342E2]/30 rounded-xl text-[#192837] placeholder-[#192837]/40 text-sm focus:outline-none focus:ring-2 focus:ring-[#7342E2]/30 focus:border-[#7342E2] focus:bg-white transition-all"
-                  />
-                </div>
-                <p className="text-[10px] text-[#192837]/50 mt-1">
-                  Default seed key: <code className="bg-gray-100 px-1 rounded">EDH-ADMIN-2026-KEY</code>
-                </p>
-              </motion.div>
-            )}
-
-            {/* Submit Button */}
-            <motion.button
-              whileHover={{ scale: 1.02, filter: "brightness(1.05)" }}
-              whileTap={{ scale: 0.98 }}
-              type="submit"
-              disabled={loading}
-              className="w-full flex items-center justify-between py-3.5 px-6 rounded-full font-semibold text-white shadow-lg shadow-[#7342E2]/25 cursor-pointer select-none transition-all disabled:opacity-60 disabled:cursor-not-allowed mt-3"
-              style={{ backgroundColor: "#7342E2" }}
-            >
-              {loading ? (
-                <div className="flex items-center justify-center w-full gap-2">
-                  <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
-                  <span>Creating Account...</span>
-                </div>
-              ) : (
-                <>
-                  <span>Create Account</span>
-                  <div className="w-7 h-7 rounded-full bg-white/20 flex items-center justify-center">
-                    <ArrowRight size={15} />
-                  </div>
-                </>
-              )}
-            </motion.button>
-          </form>
-
-          {/* Switch to Login */}
-          <div className="mt-6 pt-5 border-t border-[#192837]/10 text-center text-sm text-[#192837]/70">
-            Already have an account?{" "}
-            <Link
-              to="/login"
-              className="font-semibold text-[#7342E2] hover:underline"
-            >
-              Sign In
-            </Link>
+              );
+            })}
           </div>
-        </motion.div>
-      </main>
+        </div>
 
-      {/* Footer */}
-      <footer className="relative z-10 w-full py-4 text-center text-xs opacity-50 text-[#192837]">
-        © {new Date().getFullYear()} Enterprise Decision Hub. All rights reserved.
-      </footer>
-    </div>
+        {role === "ADMIN" && (
+          <Field label="Admin invite key" htmlFor="inviteKey" hint="Default seed key: EDH-ADMIN-2026-KEY">
+            <div className="relative">
+              <Key
+                size={16}
+                className="pointer-events-none absolute left-3.5 top-1/2 -translate-y-1/2 text-ink-subtle"
+              />
+              <Input
+                id="inviteKey"
+                type="password"
+                required
+                value={inviteKey}
+                onChange={(event) => setInviteKey(event.target.value)}
+                placeholder="Enter security admin invite key"
+                className="pl-10"
+              />
+            </div>
+          </Field>
+        )}
+
+        <Button type="submit" size="lg" fullWidth iconRight={ArrowRight} loading={loading}>
+          {loading ? "Creating account…" : "Create account"}
+        </Button>
+      </form>
+
+      <p className="mt-6 border-t border-line pt-5 text-center text-sm text-ink-muted">
+        Already have an account?{" "}
+        <Link to="/login" className="font-semibold text-accent hover:underline">
+          Sign in
+        </Link>
+      </p>
+    </AuthLayout>
   );
 }

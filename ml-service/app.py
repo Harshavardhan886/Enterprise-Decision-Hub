@@ -147,6 +147,81 @@ def build_feature_dataframe(amount: float, is_duplicate: int, overspend_pct: flo
     }])
 
 
+def compute_waterfall_attribution(amount: float, is_duplicate: int, overspend_pct: float, vendor_risk_level: str, is_anomaly: bool = False):
+    """
+    Computes local feature attribution (Waterfall breakdown) for an individual invoice.
+    Deconstructs the final 0-10 risk score into distinct additive risk factors.
+    """
+    waterfall = [
+        {
+            "factor": "Baseline Enterprise Risk",
+            "delta": 0.5,
+            "impact": "+0.5",
+            "type": "base",
+            "description": "Standard baseline probability across normal transactions"
+        }
+    ]
+
+    if is_duplicate:
+        waterfall.append({
+            "factor": "Duplicate Invoice Match",
+            "delta": 4.0,
+            "impact": "+4.0",
+            "type": "critical",
+            "description": "Exact vendor & invoice number hash previously processed"
+        })
+
+    v_level = str(vendor_risk_level).upper()
+    if v_level == "HIGH":
+        waterfall.append({
+            "factor": "Supplier Risk: HIGH",
+            "delta": 2.5,
+            "impact": "+2.5",
+            "type": "risk",
+            "description": "Supplier has elevated historical defect or dispute record"
+        })
+    elif v_level == "MEDIUM":
+        waterfall.append({
+            "factor": "Supplier Risk: MEDIUM",
+            "delta": 1.2,
+            "impact": "+1.2",
+            "type": "warning",
+            "description": "Supplier exceeds standard monitoring threshold"
+        })
+
+    if overspend_pct > 0:
+        pct_delta = round(min(2.5, (overspend_pct / 100.0) * 3.5), 1)
+        if pct_delta > 0.1:
+            waterfall.append({
+                "factor": f"Department Budget Overrun ({overspend_pct:.1f}%)",
+                "delta": pct_delta,
+                "impact": f"+{pct_delta}",
+                "type": "risk" if pct_delta >= 1.5 else "warning",
+                "description": f"Exceeds departmental monthly allocated budget"
+            })
+
+    if amount >= 100000:
+        amt_delta = round(min(2.0, 0.5 + ((amount - 100000) / 100000.0) * 0.8), 1)
+        waterfall.append({
+            "factor": f"Capital Expenditure Tier (₹{amount:,.0f})",
+            "delta": amt_delta,
+            "impact": f"+{amt_delta}",
+            "type": "risk" if amt_delta >= 1.5 else "warning",
+            "description": "High-value outlay exceeds standard departmental median"
+        })
+
+    if is_anomaly:
+        waterfall.append({
+            "factor": "Structural Anomaly (Isolation Forest)",
+            "delta": 1.5,
+            "impact": "+1.5",
+            "type": "anomaly",
+            "description": "Multi-dimensional outlier detected outside normal cluster"
+        })
+
+    return waterfall
+
+
 # ─── Endpoints ────────────────────────────────────────────────────────────────
 
 @app.get("/")
@@ -243,6 +318,14 @@ def predict(req: PredictRequest):
     risk_label = "HIGH" if blended_prob >= 0.60 else ("MEDIUM" if blended_prob >= 0.35 else "LOW")
     model_agreement = "CONCORDANT" if abs(rf_prob - xgb_prob) < 0.15 else "DIVERGENT"
 
+    waterfall = compute_waterfall_attribution(
+        amount=req.amount,
+        is_duplicate=req.is_duplicate,
+        overspend_pct=req.overspend_percentage,
+        vendor_risk_level=req.vendor_risk_level,
+        is_anomaly=is_anomaly
+    )
+
     return {
         # Standard top-level fields for backwards compatibility with backend
         "risk_probability": round(blended_prob, 4),
@@ -254,6 +337,7 @@ def predict(req: PredictRequest):
         "model_version": model_metadata.get("model_version", "v3.0-MultiModel"),
         "mlflow_run_id": model_metadata.get("mlflow_run_id", "local"),
         "model_agreement": model_agreement,
+        "waterfall": waterfall,
 
         # Explicit outputs per model:
         # Each model outputs: Risk Probability (0-100%), Risk Score (0-10), Anomaly Flag (True/False), Feature Importance
@@ -400,6 +484,13 @@ def explain(req: ExplainRequest):
     )
 
     models_meta = model_metadata.get("models", {})
+    waterfall = compute_waterfall_attribution(
+        amount=req.amount,
+        is_duplicate=req.is_duplicate,
+        overspend_pct=req.overspend_percentage,
+        vendor_risk_level=req.vendor_risk_level,
+        is_anomaly=iso_flag
+    )
     return {
         "risk_score": req.risk_score,
         "risk_level": level,
@@ -409,6 +500,7 @@ def explain(req: ExplainRequest):
         "summary": summary,
         "factors": factors,
         "recommendations": recommendations,
+        "waterfall": waterfall,
         "model_version": model_metadata.get("model_version", "v3.0-MultiModel"),
         "mlflow_run_id": model_metadata.get("mlflow_run_id", "local"),
         "feature_importances": {

@@ -3,11 +3,37 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <meta name="theme-color" content="#0b0f19" />
+  <meta
+    name="description"
+    content="Enterprise Decision Hub — AI-powered invoice risk scoring, budget governance and compliance intelligence."
+  />
   <title>Enterprise Decision Hub — AI Risk &amp; Governance</title>
-  <link rel="preconnect" href="https://fonts.googleapis.com">
-  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://db.onlinewebfonts.com/c/04e6981992c0e2e7642af2074ebe3901?family=Helvetica+Now+Display+Bold" rel="stylesheet" type="text/css"/>
-  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&display=swap" rel="stylesheet">
+
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link
+    href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Plus+Jakarta+Sans:wght@600;700;800&family=JetBrains+Mono:wght@400;500;600&display=swap"
+    rel="stylesheet"
+  />
+
+  <!--
+    Resolve the saved theme before first paint so dark-mode users never see a
+    white flash while React boots.
+  -->
+  <script>
+    (function () {
+      try {
+        var stored = localStorage.getItem("edh_theme");
+        var theme = stored === "light" ? "light" : "dark";
+        document.documentElement.setAttribute("data-theme", theme);
+        document.documentElement.classList.toggle("dark", theme === "dark");
+      } catch (e) {
+        document.documentElement.setAttribute("data-theme", "dark");
+        document.documentElement.classList.add("dark");
+      }
+    })();
+  </script>
 </head>
 <body class="h-full antialiased">
   <noscript>You need to enable JavaScript to run this app.</noscript>

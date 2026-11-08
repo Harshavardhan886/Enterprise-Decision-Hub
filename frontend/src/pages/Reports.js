@@ -1,34 +1,39 @@
 import React, { useEffect, useState } from "react";
 import {
-  Download,
-  Receipt,
-  Wallet,
   Bell,
   Building2,
   ClipboardList,
+  Download,
+  FileSpreadsheet,
+  Receipt,
+  Wallet,
 } from "lucide-react";
 import api from "../services/api";
+import Alert from "../components/ui/Alert";
+import Button from "../components/ui/Button";
+import Card from "../components/ui/Card";
+import PageHeader from "../components/ui/PageHeader";
 
 function downloadCSV(filename, rows, headers) {
   const lines = [
     headers.join(","),
-    ...rows.map((r) =>
+    ...rows.map((row) =>
       headers
-        .map((h) => {
-          const val = r[h] !== undefined && r[h] !== null ? String(r[h]) : "";
-          return val.includes(",") ? `"${val}"` : val;
+        .map((header) => {
+          const value = row[header] !== undefined && row[header] !== null ? String(row[header]) : "";
+          return value.includes(",") ? `"${value}"` : value;
         })
         .join(",")
     ),
   ];
-  const blob = new Blob([lines.join("\n")], { type: "text/csv" });
+  const blob = new Blob([lines.join("\n")], { type: "text/csv;charset=utf-8;" });
   const url = URL.createObjectURL(blob);
-  const a = document.createElement("a");
-  a.href = url;
-  a.download = filename;
-  document.body.appendChild(a);
-  a.click();
-  document.body.removeChild(a);
+  const anchor = document.createElement("a");
+  anchor.href = url;
+  anchor.download = filename;
+  document.body.appendChild(anchor);
+  anchor.click();
+  document.body.removeChild(anchor);
   URL.revokeObjectURL(url);
 }
 
@@ -41,6 +46,10 @@ export default function Reports() {
   const [error, setError] = useState(null);
 
   useEffect(() => {
+    document.title = "EDH — Compliance Exports";
+  }, []);
+
+  useEffect(() => {
     api.get("/invoices").then((r) => setInvoices(r.data)).catch(() => setError("Could not load invoices"));
     api.get("/budgets").then((r) => setBudgets(r.data)).catch(() => setError("Could not load budgets"));
     api.get("/alerts").then((r) => setAlerts(r.data)).catch(() => setError("Could not load alerts"));
@@ -50,130 +59,166 @@ export default function Reports() {
 
   const reports = [
     {
-      title: "Invoice Ledger Report",
-      description: `${invoices.length} invoices · ${invoices.filter((i) => i.duplicateFlag).length} duplicate flags · ${invoices.filter((i) => (i.riskScore || 0) >= 5).length} high risk`,
+      title: "Invoice Ledger",
+      description: "Full invoice register with duplicate flags, risk scores and approval status.",
+      meta: [
+        { label: "Rows", value: invoices.length },
+        { label: "Duplicates", value: invoices.filter((i) => i.duplicateFlag).length },
+        { label: "High risk", value: invoices.filter((i) => (i.riskScore || 0) >= 5).length },
+      ],
       icon: Receipt,
-      borderGlow: "from-indigo-500 to-[#7342E2]",
-      btnClass: "bg-[#7342E2] hover:bg-[#6028d9] shadow-[#7342E2]/25",
+      tone: "from-indigo-500 to-accent",
       action: () =>
-        downloadCSV(
-          "invoices.csv",
-          invoices,
-          ["invoiceNumber", "vendorName", "department", "amount", "status", "duplicateFlag", "riskScore", "invoiceDate"]
-        ),
+        downloadCSV("invoices.csv", invoices, [
+          "invoiceNumber",
+          "vendorName",
+          "department",
+          "amount",
+          "status",
+          "duplicateFlag",
+          "riskScore",
+          "invoiceDate",
+        ]),
     },
     {
-      title: "Budget Allocation Report",
-      description: `${budgets.length} tracked departments · ${budgets.filter((b) => b.overspendFlag).length} overspending alerts`,
+      title: "Budget Allocation",
+      description: "Departmental allocations, realised spend and overspend variance flags.",
+      meta: [
+        { label: "Budgets", value: budgets.length },
+        { label: "Overspending", value: budgets.filter((b) => b.overspendFlag).length },
+      ],
       icon: Wallet,
-      borderGlow: "from-amber-500 to-orange-500",
-      btnClass: "bg-amber-600 hover:bg-amber-700 shadow-amber-600/25",
+      tone: "from-amber-500 to-orange-500",
       action: () =>
-        downloadCSV(
-          "budgets.csv",
-          budgets,
-          ["department", "month", "year", "allocatedAmount", "spentAmount", "overspendPercentage", "overspendFlag"]
-        ),
+        downloadCSV("budgets.csv", budgets, [
+          "department",
+          "month",
+          "year",
+          "allocatedAmount",
+          "spentAmount",
+          "overspendPercentage",
+          "overspendFlag",
+        ]),
     },
     {
       title: "Security & Policy Violations",
-      description: `${alerts.length} total alerts · ${alerts.filter((a) => a.riskScore >= 7).length} critical · ${alerts.filter((a) => a.status !== "RESOLVED").length} open`,
+      description: "Every alert raised by the policy engine, ML ensemble and surplus detector.",
+      meta: [
+        { label: "Total", value: alerts.length },
+        { label: "Critical", value: alerts.filter((a) => a.riskScore >= 7).length },
+        { label: "Open", value: alerts.filter((a) => a.status !== "RESOLVED").length },
+      ],
       icon: Bell,
-      borderGlow: "from-red-500 to-rose-500",
-      btnClass: "bg-red-600 hover:bg-red-700 shadow-red-600/25",
+      tone: "from-red-500 to-rose-500",
       action: () =>
-        downloadCSV(
-          "alerts.csv",
-          alerts,
-          ["type", "department", "riskScore", "status", "message", "recommendation"]
-        ),
+        downloadCSV("alerts.csv", alerts, [
+          "type",
+          "department",
+          "riskScore",
+          "status",
+          "message",
+          "recommendation",
+        ]),
     },
     {
       title: "Vendor Risk Assessment",
-      description: `${vendors.length} evaluated vendors · ${vendors.filter((v) => v.riskLevel === "HIGH").length} high risk entities`,
+      description: "Supplier risk levels, invoice volumes and flagged-invoice exposure.",
+      meta: [
+        { label: "Vendors", value: vendors.length },
+        { label: "High risk", value: vendors.filter((v) => v.riskLevel === "HIGH").length },
+      ],
       icon: Building2,
-      borderGlow: "from-[#7342E2] to-violet-500",
-      btnClass: "bg-violet-700 hover:bg-violet-800 shadow-violet-700/25",
+      tone: "from-violet-500 to-fuchsia-500",
       action: () =>
-        downloadCSV(
-          "vendors.csv",
-          vendors,
-          ["vendorName", "totalInvoices", "flaggedInvoices", "riskLevel", "riskScore"]
-        ),
+        downloadCSV("vendors.csv", vendors, [
+          "vendorName",
+          "totalInvoices",
+          "flaggedInvoices",
+          "riskLevel",
+          "riskScore",
+        ]),
     },
     {
       title: "Compliance & Audit Trail",
-      description: `${auditLogs.length} immutable transaction audit records logged`,
+      description: "Immutable record of every governance action performed in the platform.",
+      meta: [
+        { label: "Records", value: auditLogs.length },
+        { label: "Retention", value: "Permanent" },
+      ],
       icon: ClipboardList,
-      borderGlow: "from-emerald-500 to-teal-500",
-      btnClass: "bg-emerald-600 hover:bg-emerald-700 shadow-emerald-600/25",
+      tone: "from-emerald-500 to-teal-500",
       action: () =>
-        downloadCSV(
-          "audit-log.csv",
-          auditLogs,
-          ["action", "entityType", "entityId", "performedBy", "details", "timestamp"]
-        ),
+        downloadCSV("audit-log.csv", auditLogs, [
+          "action",
+          "entityType",
+          "entityId",
+          "performedBy",
+          "details",
+          "timestamp",
+        ]),
     },
   ];
 
   return (
     <div className="space-y-6">
-      {/* Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-2 border-b border-[#192837]/8">
-        <div>
-          <h1
-            className="text-2xl sm:text-3xl font-extrabold text-[#192837] tracking-tight"
-            style={{ fontFamily: "var(--font-heading)" }}
-          >
-            Compliance & Analytical Exports
-          </h1>
-          <p className="text-sm text-[#192837]/70 mt-1">
-            Generate, filter, and export clean CSV reports across governance modules.
-          </p>
-        </div>
-      </div>
+      <PageHeader
+        eyebrow="Insights"
+        title="Compliance & Analytical Exports"
+        description="Generate clean, audit-ready CSV extracts across every governance module."
+      />
 
-      {/* Reports Grid */}
       {error && (
-        <div className="p-4 rounded-xl bg-red-50 border border-red-200 text-red-700 text-xs font-medium">
-          ⚠ {error} — CSV exports may be empty.
-        </div>
+        <Alert tone="warning" title="Some datasets could not be loaded">
+          {error} — exported CSV files may be incomplete.
+        </Alert>
       )}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
-        {reports.map((r) => {
-          const Icon = r.icon;
-          return (
-            <div
-              key={r.title}
-              className="relative overflow-hidden bg-white/95 rounded-2xl border border-[#192837]/8 p-6 shadow-[0_4px_20px_-4px_rgba(25,40,55,0.05)] hover:shadow-[0_8px_30px_-4px_rgba(115,66,226,0.10)] transition-all flex flex-col justify-between"
-            >
-              <div className={`absolute top-0 left-0 right-0 h-1 bg-gradient-to-r ${r.borderGlow}`} />
-              <div>
-                <div className="w-10 h-10 rounded-xl bg-[#F5F5F3] flex items-center justify-center text-[#192837] mb-4">
-                  <Icon size={20} />
-                </div>
-                <h3
-                  className="text-base font-bold text-[#192837]"
-                  style={{ fontFamily: "var(--font-heading)" }}
-                >
-                  {r.title}
-                </h3>
-                <p className="text-xs text-[#192837]/70 mt-1.5 leading-relaxed mb-6">
-                  {r.description}
-                </p>
-              </div>
 
-              <button
-                onClick={r.action}
-                className={`w-full py-2.5 px-4 rounded-xl text-xs font-semibold text-white shadow-md transition-all flex items-center justify-center gap-2 cursor-pointer ${r.btnClass}`}
+      <div className="grid grid-cols-1 gap-5 md:grid-cols-2 xl:grid-cols-3">
+        {reports.map((report) => {
+          const Icon = report.icon;
+          return (
+            <Card
+              key={report.title}
+              interactive
+              className="flex flex-col overflow-hidden p-5"
+            >
+              <div className={`mb-4 h-1 w-12 rounded-full bg-gradient-to-r ${report.tone}`} />
+              <span className="flex h-10 w-10 items-center justify-center rounded-xl bg-surface-2 text-ink">
+                <Icon size={19} />
+              </span>
+              <h3 className="mt-3 text-sm font-bold text-ink">{report.title}</h3>
+              <p className="mt-1 text-xs leading-relaxed text-ink-muted">{report.description}</p>
+
+              <dl className="mt-4 grid grid-cols-3 gap-2 rounded-xl bg-surface-2 p-2.5">
+                {report.meta.map((item) => (
+                  <div key={item.label} className="text-center">
+                    <dt className="text-[10px] font-semibold uppercase tracking-wider text-ink-subtle">
+                      {item.label}
+                    </dt>
+                    <dd className="num mt-0.5 text-sm font-bold text-ink">{item.value}</dd>
+                  </div>
+                ))}
+              </dl>
+
+              <Button
+                variant="secondary"
+                size="sm"
+                icon={Download}
+                fullWidth
+                onClick={report.action}
+                className="mt-4"
               >
-                <Download size={14} />
-                <span>Export CSV</span>
-              </button>
-            </div>
+                Export CSV
+              </Button>
+            </Card>
           );
         })}
       </div>
+
+      <p className="flex items-center gap-1.5 text-2xs text-ink-subtle">
+        <FileSpreadsheet size={12} />
+        Exports are generated in the browser from live data — no records leave your environment.
+      </p>
     </div>
   );
 }

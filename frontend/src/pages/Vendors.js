@@ -1,153 +1,180 @@
-import React, { useEffect, useState } from "react";
-import {
-  Building2,
-  Filter,
-  AlertCircle,
-} from "lucide-react";
+import React, { useEffect, useMemo, useState } from "react";
+import { AlertCircle, Building2, Filter, ShieldAlert, TrendingUp } from "lucide-react";
 import api from "../services/api";
 import RiskBadge from "../components/RiskBadge";
+import Alert from "../components/ui/Alert";
+import Badge from "../components/ui/Badge";
+import Card from "../components/ui/Card";
+import EmptyState from "../components/ui/EmptyState";
+import PageHeader, { MetaPill } from "../components/ui/PageHeader";
+import StatCard from "../components/ui/StatCard";
+import { FilterChips } from "../components/ui/Tabs";
+import { Table, TBody, Td, Th, THead, Tr } from "../components/ui/Table";
 
-const ERR = "Cannot reach backend. Make sure it is running on port 8080.";
+const ERR = "Cannot reach the backend. Make sure it is running on port 8080.";
+
+const RISK_TONES = { HIGH: "danger", MEDIUM: "warning", LOW: "success" };
 
 export default function Vendors() {
   const [vendors, setVendors] = useState([]);
   const [filter, setFilter] = useState("ALL");
   const [error, setError] = useState(null);
 
-  const load = (level) => {
-    setError(null);
-    const url = level === "ALL" ? "/vendors" : `/vendors/risk/${level}`;
-    api
-      .get(url)
-      .then((res) => setVendors(res.data))
-      .catch(() => setError(ERR));
-  };
+  useEffect(() => {
+    document.title = "EDH — Vendor Risk Intelligence";
+  }, []);
 
   useEffect(() => {
-    load(filter);
+    let cancelled = false;
+    setError(null);
+    const url = filter === "ALL" ? "/vendors" : `/vendors/risk/${filter}`;
+
+    api
+      .get(url)
+      .then((res) => {
+        if (!cancelled) setVendors(res.data || []);
+      })
+      .catch(() => {
+        if (!cancelled) setError(ERR);
+      });
+
+    return () => {
+      cancelled = true;
+    };
   }, [filter]);
 
-  const riskBadgeStyle = (level) => {
-    if (level === "HIGH") return "bg-red-50 text-red-700 border-red-200";
-    if (level === "MEDIUM") return "bg-amber-50 text-amber-700 border-amber-200";
-    return "bg-emerald-50 text-emerald-700 border-emerald-200";
-  };
+  const summary = useMemo(() => {
+    const high = vendors.filter((v) => v.riskLevel === "HIGH").length;
+    const flagged = vendors.reduce((total, v) => total + (v.flaggedInvoices || 0), 0);
+    const invoices = vendors.reduce((total, v) => total + (v.totalInvoices || 0), 0);
+    const flagRate = invoices > 0 ? Math.round((flagged / invoices) * 100) : 0;
+    return { high, flagged, invoices, flagRate };
+  }, [vendors]);
 
   return (
     <div className="space-y-6">
-      {/* Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-2 border-b border-[#192837]/8">
-        <div>
-          <h1
-            className="text-2xl sm:text-3xl font-extrabold text-[#192837] tracking-tight"
-            style={{ fontFamily: "var(--font-heading)" }}
-          >
-            Vendor Risk Intelligence
-          </h1>
-          <p className="text-sm text-[#192837]/70 mt-1">
-            Continuous supplier risk profiling, duplicate invoice ratios, and anomaly monitoring.
-          </p>
-        </div>
-        <div className="flex items-center gap-2">
-          <span className="text-xs font-semibold text-[#192837]/60 bg-white px-3 py-1.5 rounded-full border border-[#192837]/10 shadow-xs">
-            Suppliers: <span className="text-[#192837] font-bold">{vendors.length}</span>
-          </span>
-        </div>
+      <PageHeader
+        eyebrow="Operations"
+        title="Vendor Risk Intelligence"
+        description="Continuous supplier risk profiling, duplicate invoice ratios and anomaly monitoring."
+        actions={<MetaPill label="Suppliers" value={vendors.length} />}
+      />
+
+      {error && <Alert tone="danger">{error}</Alert>}
+
+      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
+        <StatCard label="Suppliers tracked" value={vendors.length} icon={Building2} />
+        <StatCard label="High risk" value={summary.high} icon={ShieldAlert} tone="danger" />
+        <StatCard label="Flagged invoices" value={summary.flagged} icon={AlertCircle} tone="warning" />
+        <StatCard
+          label="Portfolio flag rate"
+          value={`${summary.flagRate}%`}
+          sub={`${summary.invoices} invoices evaluated`}
+          icon={TrendingUp}
+          tone="purple"
+        />
       </div>
 
-      {error && (
-        <div className="p-4 rounded-xl bg-red-50 border border-red-200 text-red-700 text-xs font-medium flex items-center gap-2">
-          <AlertCircle size={16} />
-          <span>{error}</span>
-        </div>
-      )}
-
-      {/* Filter Tabs Card */}
-      <div className="bg-white/95 rounded-2xl border border-[#192837]/8 p-4 shadow-[0_4px_20px_-4px_rgba(25,40,55,0.05)] flex items-center justify-between">
-        <div className="flex items-center gap-2">
-          <Filter size={15} className="text-[#192837]/50 ml-1" />
-          <span className="text-xs font-semibold text-[#192837]/60 uppercase tracking-wider mr-2">
-            Filter Risk:
+      <Card className="p-4">
+        <div className="flex flex-wrap items-center gap-3">
+          <span className="inline-flex items-center gap-1.5 text-2xs font-semibold uppercase tracking-wider text-ink-subtle">
+            <Filter size={13} />
+            Risk level
           </span>
-          <div className="flex items-center gap-1.5">
-            {["ALL", "LOW", "MEDIUM", "HIGH"].map((level) => (
-              <button
-                key={level}
-                onClick={() => setFilter(level)}
-                className={`px-3.5 py-1.5 rounded-full text-xs font-semibold transition-all cursor-pointer select-none ${
-                  filter === level
-                    ? "bg-[#7342E2] text-white shadow-sm shadow-[#7342E2]/25"
-                    : "bg-[#F5F5F3] text-[#192837]/70 hover:bg-[#192837]/10"
-                }`}
-              >
-                {level}
-              </button>
-            ))}
-          </div>
+          <FilterChips
+            value={filter}
+            onChange={setFilter}
+            items={["ALL", "LOW", "MEDIUM", "HIGH"]}
+          />
         </div>
-      </div>
+      </Card>
 
-      {/* Vendors Table */}
-      <div className="bg-white/95 rounded-2xl border border-[#192837]/8 shadow-[0_4px_20px_-4px_rgba(25,40,55,0.05)] overflow-hidden">
-        <div className="overflow-x-auto">
-          <table className="w-full text-left text-xs">
-            <thead className="bg-[#F5F5F3]/80 border-b border-[#192837]/8 text-[#192837]/60 uppercase font-semibold text-[11px] tracking-wider">
-              <tr>
-                <th className="px-5 py-3.5">Vendor Name</th>
-                <th className="px-5 py-3.5">Total Invoices</th>
-                <th className="px-5 py-3.5">Flagged Invoices</th>
-                <th className="px-5 py-3.5">Flag Rate</th>
-                <th className="px-5 py-3.5">Risk Level</th>
-                <th className="px-5 py-3.5 text-right">Risk Assessment</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-[#192837]/5 text-[#192837]">
-              {vendors.map((v) => {
-                const flagRate = v.totalInvoices > 0 ? Math.round((v.flaggedInvoices / v.totalInvoices) * 100) : 0;
-                return (
-                  <tr key={v.id} className="hover:bg-[#7342E2]/[0.02] transition-colors">
-                    <td className="px-5 py-4 font-bold text-[#192837] flex items-center gap-2">
-                      <div className="w-7 h-7 rounded-lg bg-[#7342E2]/10 text-[#7342E2] flex items-center justify-center">
-                        <Building2 size={14} />
+      <Card className="overflow-hidden">
+        <Table>
+          <THead>
+            <Th>Vendor</Th>
+            <Th className="text-right">Invoices</Th>
+            <Th className="text-right">Flagged</Th>
+            <Th>Flag rate</Th>
+            <Th>Risk level</Th>
+            <Th className="text-right">Risk score</Th>
+          </THead>
+          <TBody>
+            {vendors.map((vendor) => {
+              const flagRate =
+                vendor.totalInvoices > 0
+                  ? Math.round((vendor.flaggedInvoices / vendor.totalInvoices) * 100)
+                  : 0;
+
+              return (
+                <Tr key={vendor.id}>
+                  <Td>
+                    <div className="flex items-center gap-2.5">
+                      <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-accent/10 text-accent">
+                        <Building2 size={15} />
+                      </span>
+                      <span className="font-semibold text-ink">{vendor.vendorName}</span>
+                    </div>
+                  </Td>
+                  <Td className="num text-right font-semibold">{vendor.totalInvoices}</Td>
+                  <Td className="num text-right">
+                    {vendor.flaggedInvoices > 0 ? (
+                      <span className="font-bold text-danger">{vendor.flaggedInvoices}</span>
+                    ) : (
+                      <span className="text-ink-subtle">0</span>
+                    )}
+                  </Td>
+                  <Td>
+                    <div className="flex items-center gap-2">
+                      <div className="h-1.5 w-16 overflow-hidden rounded-full bg-surface-3">
+                        <div
+                          className={
+                            flagRate > 20
+                              ? "h-full rounded-full bg-danger"
+                              : flagRate > 0
+                              ? "h-full rounded-full bg-warning"
+                              : "h-full rounded-full bg-success"
+                          }
+                          style={{ width: `${Math.min(flagRate, 100)}%` }}
+                        />
                       </div>
-                      <span>{v.vendorName}</span>
-                    </td>
-                    <td className="px-5 py-4 font-semibold">{v.totalInvoices}</td>
-                    <td className="px-5 py-4">
-                      {v.flaggedInvoices > 0 ? (
-                        <span className="font-bold text-red-600">{v.flaggedInvoices}</span>
-                      ) : (
-                        <span className="text-[#192837]/50">0</span>
-                      )}
-                    </td>
-                    <td className="px-5 py-4">
-                      <span className={`font-semibold ${flagRate > 20 ? "text-red-600" : "text-[#192837]"}`}>
+                      <span
+                        className={`num text-xs font-semibold ${
+                          flagRate > 20 ? "text-danger" : "text-ink-muted"
+                        }`}
+                      >
                         {flagRate}%
                       </span>
-                    </td>
-                    <td className="px-5 py-4">
-                      <span className={`inline-block px-2.5 py-1 rounded-full text-[11px] font-semibold border ${riskBadgeStyle(v.riskLevel)}`}>
-                        {v.riskLevel}
-                      </span>
-                    </td>
-                    <td className="px-5 py-4 text-right">
-                      <RiskBadge score={v.riskScore} />
-                    </td>
-                  </tr>
-                );
-              })}
-              {vendors.length === 0 && !error && (
-                <tr>
-                  <td colSpan={6} className="px-5 py-12 text-center text-[#192837]/50">
-                    <Building2 size={32} className="mx-auto mb-2 opacity-30" />
-                    <p className="font-medium">No vendors evaluated yet — they appear automatically when invoices are processed</p>
-                  </td>
-                </tr>
-              )}
-            </tbody>
-          </table>
-        </div>
-      </div>
+                    </div>
+                  </Td>
+                  <Td>
+                    <Badge tone={RISK_TONES[vendor.riskLevel] || "neutral"} dot>
+                      {vendor.riskLevel || "UNKNOWN"}
+                    </Badge>
+                  </Td>
+                  <Td className="text-right">
+                    <div className="flex justify-end">
+                      <RiskBadge score={vendor.riskScore} />
+                    </div>
+                  </Td>
+                </Tr>
+              );
+            })}
+          </TBody>
+        </Table>
+
+        {vendors.length === 0 && !error && (
+          <EmptyState
+            icon={Building2}
+            title={filter === "ALL" ? "No vendors evaluated yet" : `No ${filter.toLowerCase()} risk vendors`}
+            description={
+              filter === "ALL"
+                ? "Vendors appear here automatically once their first invoice is processed."
+                : "Try a different risk level to see the rest of the supplier book."
+            }
+          />
+        )}
+      </Card>
     </div>
   );
 }

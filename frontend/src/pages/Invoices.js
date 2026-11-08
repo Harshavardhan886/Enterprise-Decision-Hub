@@ -1,40 +1,73 @@
-import React, { useEffect, useState, useRef, useCallback } from "react";
+import React, { useCallback, useEffect, useRef, useState } from "react";
 import {
-  Receipt,
-  PlusCircle,
-  CheckCircle2,
-  XCircle,
   AlertCircle,
-  Sparkles,
-  Building2,
   BrainCircuit,
-  X,
-  ShieldAlert,
-  ShieldCheck,
-  TrendingUp,
-  Cpu,
-  Layers,
-  Search,
+  Building2,
+  CheckCircle2,
   ChevronLeft,
   ChevronRight,
-  Trash2,
-  Zap,
-  Sliders,
+  Cpu,
+  Layers,
+  PlusCircle,
   Radio,
+  Receipt,
   RefreshCw,
   Scale,
+  Search,
+  ShieldAlert,
+  ShieldCheck,
+  Sliders,
+  Sparkles,
+  Trash2,
+  TrendingUp,
+  XCircle,
+  Zap,
 } from "lucide-react";
 import api from "../services/api";
 import RiskBadge, { computeSentryLevel } from "../components/RiskBadge";
 import ConfirmModal from "../components/ConfirmModal";
-import LoadingSkeleton from "../components/LoadingSkeleton";
+import Alert from "../components/ui/Alert";
+import Badge from "../components/ui/Badge";
+import Button from "../components/ui/Button";
+import Card, { CardBody, CardHeader } from "../components/ui/Card";
+import EmptyState from "../components/ui/EmptyState";
+import LoadingSkeleton from "../components/ui/Skeleton";
+import Modal from "../components/ui/Modal";
+import PageHeader, { MetaPill } from "../components/ui/PageHeader";
+import { Field, Input, SearchInput, Select } from "../components/ui/Field";
+import { Table, TBody, Td, Th, THead, Tr } from "../components/ui/Table";
 
-const STATUS_BADGES = {
-  PENDING: "bg-amber-50 text-amber-700 border-amber-200",
-  APPROVED: "bg-emerald-50 text-emerald-700 border-emerald-200",
-  REJECTED: "bg-red-50 text-red-700 border-red-200",
-  FLAGGED: "bg-purple-50 text-[#7342E2] border-[#7342E2]/20",
+const STATUS_TONES = {
+  PENDING: "warning",
+  APPROVED: "success",
+  REJECTED: "danger",
+  FLAGGED: "purple",
 };
+
+const DEPARTMENTS = ["Finance", "HR", "Operations", "Inventory"];
+const ITEMS_PER_PAGE = 8;
+
+const today = () => new Date().toISOString().split("T")[0];
+
+const emptyForm = () => ({
+  invoiceNumber: "",
+  vendorName: "",
+  department: "Finance",
+  amount: "",
+  invoiceDate: today(),
+});
+
+/** Small labelled metric used inside the audit modal. */
+function MetricTile({ label, children, className }) {
+  return (
+    <div className={`rounded-xl border border-line bg-surface-2 p-3 text-center ${className || ""}`}>
+      <span className="block text-[10px] font-bold uppercase tracking-wider text-ink-subtle">
+        {label}
+      </span>
+      <div className="mt-1">{children}</div>
+    </div>
+  );
+}
 
 export default function Invoices() {
   const [invoices, setInvoices] = useState([]);
@@ -43,51 +76,41 @@ export default function Invoices() {
   const [submitting, setSubmitting] = useState(false);
   const [selectedInvoice, setSelectedInvoice] = useState(null);
   const [invoiceToDelete, setInvoiceToDelete] = useState(null);
+  const [criticalApprovalInvoice, setCriticalApprovalInvoice] = useState(null);
 
-  // Search & Filter State
   const [searchQuery, setSearchQuery] = useState("");
   const [departmentFilter, setDepartmentFilter] = useState("ALL");
   const [statusFilter, setStatusFilter] = useState("ALL");
   const [sentryFilter, setSentryFilter] = useState("ALL");
-  const [surplusFilter, setSurplusFilter] = useState("ALL"); // ALL, SURPLUS_ONLY, DEPT_ONLY, VENDOR_ONLY
+  const [surplusFilter, setSurplusFilter] = useState("ALL");
   const [currentPage, setCurrentPage] = useState(1);
-  const itemsPerPage = 8;
 
-  // Real-Time Polling State
   const [autoPolling, setAutoPolling] = useState(true);
   const [lastUpdated, setLastUpdated] = useState(new Date());
   const autoPollingRef = useRef(autoPolling);
 
+  const [form, setForm] = useState(emptyForm);
+  const [formErrors, setFormErrors] = useState({});
+
   useEffect(() => {
     autoPollingRef.current = autoPolling;
   }, [autoPolling]);
-
-  // Form State & Validation
-  const [form, setForm] = useState({
-    invoiceNumber: "",
-    vendorName: "",
-    department: "Finance",
-    amount: "",
-    invoiceDate: new Date().toISOString().split("T")[0],
-  });
-  const [formErrors, setFormErrors] = useState({});
 
   const load = useCallback((silent = false) => {
     if (!silent) setError(null);
     api
       .get("/invoices")
       .then((res) => {
-        setInvoices(res.data);
+        setInvoices(res.data || []);
         setLastUpdated(new Date());
-        // Use functional state updater so closing the modal is never reverted by in-flight responses
+        // Keep an open modal in sync without resurrecting a modal the user closed.
         setSelectedInvoice((current) => {
           if (!current) return null;
-          const updated = res.data.find((inv) => inv.id === current.id);
-          return updated || current;
+          return (res.data || []).find((invoice) => invoice.id === current.id) || current;
         });
       })
       .catch(() => {
-        if (!silent) setError("Cannot reach backend. Make sure it is running on port 8080.");
+        if (!silent) setError("Cannot reach the backend. Make sure it is running on port 8080.");
       })
       .finally(() => {
         if (!silent) setPageLoading(false);
@@ -95,23 +118,19 @@ export default function Invoices() {
   }, []);
 
   useEffect(() => {
-    document.title = "EDH — Invoices Management";
+    document.title = "EDH — Invoices";
     load(false);
 
-    // Real-Time Polling: 8s live update loop
     const interval = setInterval(() => {
-      if (autoPollingRef.current) {
-        load(true);
-      }
+      if (autoPollingRef.current) load(true);
     }, 8000);
 
     return () => clearInterval(interval);
   }, [load]);
 
-  // Global ESC key listener to dismiss modal dialogs
   useEffect(() => {
-    const handleKeyDown = (e) => {
-      if (e.key === "Escape") {
+    const handleKeyDown = (event) => {
+      if (event.key === "Escape") {
         setSelectedInvoice(null);
         setInvoiceToDelete(null);
       }
@@ -121,55 +140,58 @@ export default function Invoices() {
   }, []);
 
   const validateForm = () => {
-    const errs = {};
-    if (!form.invoiceNumber.trim()) errs.invoiceNumber = "Invoice # is required";
-    if (!form.vendorName.trim()) errs.vendorName = "Vendor name is required";
+    const errors = {};
+    if (!form.invoiceNumber.trim()) errors.invoiceNumber = "Invoice # is required";
+    if (!form.vendorName.trim()) errors.vendorName = "Vendor name is required";
     if (!form.amount || isNaN(form.amount) || parseFloat(form.amount) <= 0) {
-      errs.amount = "Amount must be a positive number";
+      errors.amount = "Amount must be a positive number";
     }
-    if (!form.invoiceDate) errs.invoiceDate = "Date is required";
-    setFormErrors(errs);
-    return Object.keys(errs).length === 0;
+    if (!form.invoiceDate) errors.invoiceDate = "Date is required";
+    setFormErrors(errors);
+    return Object.keys(errors).length === 0;
   };
 
-  const handleSubmit = async (e) => {
-    e.preventDefault();
+  const handleSubmit = async (event) => {
+    event.preventDefault();
     if (!validateForm()) return;
 
     setSubmitting(true);
     try {
       const res = await api.post("/invoices", { ...form, amount: parseFloat(form.amount) });
-      setForm({
-        invoiceNumber: "",
-        vendorName: "",
-        department: "Finance",
-        amount: "",
-        invoiceDate: new Date().toISOString().split("T")[0],
-      });
+      setForm(emptyForm());
       setFormErrors({});
       load(false);
-      if (res.data) {
-        setSelectedInvoice(res.data);
-      }
+      if (res.data) setSelectedInvoice(res.data);
       window.dispatchEvent(new Event("alerts-updated"));
     } catch (err) {
-      const msg = err.response?.data?.message
+      const message = err.response?.data?.message
         ? err.response.data.message
         : err.response?.data?.validationErrors
         ? Object.values(err.response.data.validationErrors).join(", ")
         : "Failed to process invoice";
-      setError(msg);
+      setError(message);
     } finally {
       setSubmitting(false);
     }
   };
 
-  const handleStatusChange = async (inv, newStatus) => {
+  const handleStatusChange = async (invoice, newStatus) => {
+    if (
+      newStatus === "APPROVED" &&
+      (invoice.riskScore >= 9 || (invoice.sentryLevel || "").toUpperCase() === "RED")
+    ) {
+      setCriticalApprovalInvoice(invoice);
+      return;
+    }
+    executeStatusChange(invoice, newStatus);
+  };
+
+  const executeStatusChange = async (invoice, newStatus) => {
     try {
-      await api.put(`/invoices/${inv.id}`, { ...inv, status: newStatus });
+      await api.put(`/invoices/${invoice.id}`, { ...invoice, status: newStatus });
       load(true);
       window.dispatchEvent(new Event("alerts-updated"));
-    } catch (err) {
+    } catch {
       setError("Failed to update status");
     }
   };
@@ -181,851 +203,881 @@ export default function Invoices() {
       setInvoiceToDelete(null);
       load(false);
       window.dispatchEvent(new Event("alerts-updated"));
-    } catch (err) {
+    } catch {
       setError("Failed to delete invoice");
     }
   };
 
-  // Client-Side Search & Filter Logic with Sentry & Surplus Filter
-  const filteredInvoices = invoices.filter((inv) => {
+  const filteredInvoices = invoices.filter((invoice) => {
+    const query = searchQuery.toLowerCase();
     const matchesSearch =
-      (inv.invoiceNumber || "").toLowerCase().includes(searchQuery.toLowerCase()) ||
-      (inv.vendorName || "").toLowerCase().includes(searchQuery.toLowerCase());
-    const matchesDept = departmentFilter === "ALL" || inv.department === departmentFilter;
-    const matchesStatus = statusFilter === "ALL" || inv.status === statusFilter;
+      (invoice.invoiceNumber || "").toLowerCase().includes(query) ||
+      (invoice.vendorName || "").toLowerCase().includes(query);
+    const matchesDepartment = departmentFilter === "ALL" || invoice.department === departmentFilter;
+    const matchesStatus = statusFilter === "ALL" || invoice.status === statusFilter;
 
-    // Sentry Level matching
-    const invSentry = inv.sentryLevel || computeSentryLevel(inv.riskScore || 0);
-    const matchesSentry = sentryFilter === "ALL" || invSentry.toUpperCase() === sentryFilter.toUpperCase();
+    const invoiceSentry = invoice.sentryLevel || computeSentryLevel(invoice.riskScore || 0);
+    const matchesSentry =
+      sentryFilter === "ALL" || invoiceSentry.toUpperCase() === sentryFilter.toUpperCase();
 
-    // Surplus Filter matching (>1.5x dept avg or >2x vendor avg)
     let matchesSurplus = true;
     if (surplusFilter === "SURPLUS_ONLY") {
-      matchesSurplus = Boolean(inv.surplusExpenseFlag || inv.vendorSurplusFlag);
+      matchesSurplus = Boolean(invoice.surplusExpenseFlag || invoice.vendorSurplusFlag);
     } else if (surplusFilter === "DEPT_ONLY") {
-      matchesSurplus = Boolean(inv.surplusExpenseFlag);
+      matchesSurplus = Boolean(invoice.surplusExpenseFlag);
     } else if (surplusFilter === "VENDOR_ONLY") {
-      matchesSurplus = Boolean(inv.vendorSurplusFlag);
+      matchesSurplus = Boolean(invoice.vendorSurplusFlag);
     }
 
-    return matchesSearch && matchesDept && matchesStatus && matchesSentry && matchesSurplus;
+    return matchesSearch && matchesDepartment && matchesStatus && matchesSentry && matchesSurplus;
   });
 
-  const totalPages = Math.ceil(filteredInvoices.length / itemsPerPage) || 1;
+  const totalPages = Math.ceil(filteredInvoices.length / ITEMS_PER_PAGE) || 1;
+  const safePage = Math.min(currentPage, totalPages);
   const paginatedInvoices = filteredInvoices.slice(
-    (currentPage - 1) * itemsPerPage,
-    currentPage * itemsPerPage
+    (safePage - 1) * ITEMS_PER_PAGE,
+    safePage * ITEMS_PER_PAGE
   );
 
   const surplusCount = invoices.filter((i) => i.surplusExpenseFlag || i.vendorSurplusFlag).length;
+  const flaggedCount = invoices.filter((i) => i.duplicateFlag).length;
+
+  const renderFlagCell = (invoice) => {
+    const isDepartmentSurplus = invoice.surplusExpenseFlag;
+    const isVendorSurplus = invoice.vendorSurplusFlag;
+
+    return (
+      <div className="flex flex-wrap items-center gap-1.5">
+        {isDepartmentSurplus && isVendorSurplus ? (
+          <Badge
+            tone="purple"
+            size="sm"
+            icon={Zap}
+            title={`Exceeds 1.5× dept average (₹${invoice.departmentAverage?.toLocaleString()}) and 2× vendor average (₹${invoice.vendorAverage?.toLocaleString()})`}
+          >
+            Dual surplus
+          </Badge>
+        ) : isDepartmentSurplus ? (
+          <Badge
+            tone="purple"
+            size="sm"
+            icon={Zap}
+            title={`Exceeds 1.5× department average (₹${invoice.departmentAverage?.toLocaleString()})`}
+          >
+            Dept surplus
+          </Badge>
+        ) : isVendorSurplus ? (
+          <Badge
+            tone="pink"
+            size="sm"
+            icon={Building2}
+            title={`Exceeds 2× vendor average (₹${invoice.vendorAverage?.toLocaleString()})`}
+          >
+            Vendor surplus
+          </Badge>
+        ) : null}
+
+        {invoice.duplicateFlag && (
+          <Badge tone="danger" size="sm">
+            Duplicate
+          </Badge>
+        )}
+
+        {invoice.anomalyFlag ? (
+          <Badge tone="warning" size="sm">
+            Anomaly
+          </Badge>
+        ) : (
+          !invoice.duplicateFlag &&
+          !isDepartmentSurplus &&
+          !isVendorSurplus && <span className="text-xs text-ink-subtle">Standard</span>
+        )}
+      </div>
+    );
+  };
 
   return (
     <div className="space-y-6">
-      {/* Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-2 border-b border-[#192837]/8">
-        <div>
-          <div className="flex items-center gap-2.5">
-            <h1
-              className="text-2xl sm:text-3xl font-extrabold text-[#192837] tracking-tight"
-              style={{ fontFamily: "var(--font-heading)" }}
+      <PageHeader
+        eyebrow="Operations"
+        title="Invoices"
+        description="Submit invoices for ML risk scoring and policy evaluation, flag surplus spend and govern approvals in real time."
+        badge={
+          autoPolling && (
+            <Badge tone="success" dot size="sm">
+              Live · 8s
+            </Badge>
+          )
+        }
+        actions={
+          <>
+            <Button
+              variant={autoPolling ? "subtle" : "secondary"}
+              size="sm"
+              icon={Radio}
+              onClick={() => setAutoPolling(!autoPolling)}
+              title="Toggle 8-second automatic polling"
             >
-              Invoices Management
-            </h1>
-            {autoPolling && (
-              <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[11px] font-bold bg-emerald-100 text-emerald-800 border border-emerald-300">
-                <span className="w-2 h-2 rounded-full bg-emerald-500 animate-ping inline-block" />
-                Live Sync (8s)
-              </span>
-            )}
-          </div>
-          <p className="text-sm text-[#192837]/70 mt-1">
-            Submit, risk-score with ML & YAML policies, flag surplus expenditures, and govern approvals in real-time.
-          </p>
-        </div>
-
-        {/* Real-time sync controls */}
-        <div className="flex items-center gap-2">
-          <button
-            onClick={() => setAutoPolling(!autoPolling)}
-            className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-semibold border transition-all cursor-pointer ${
-              autoPolling
-                ? "bg-emerald-50 text-emerald-700 border-emerald-200 hover:bg-emerald-100"
-                : "bg-gray-100 text-gray-600 border-gray-200 hover:bg-gray-200"
-            }`}
-            title="Toggle 8-second automatic real-time polling"
-          >
-            <Radio size={13} className={autoPolling ? "text-emerald-600 animate-pulse" : "text-gray-400"} />
-            <span>{autoPolling ? "Live Sync ON" : "Live Sync Paused"}</span>
-          </button>
-
-          <button
-            onClick={() => load(false)}
-            className="p-2 rounded-xl bg-white hover:bg-gray-50 border border-[#192837]/10 text-[#192837]/70 hover:text-[#7342E2] transition-colors cursor-pointer"
-            title={`Last sync: ${lastUpdated.toLocaleTimeString()}`}
-          >
-            <RefreshCw size={14} />
-          </button>
-
-          <span className="text-xs font-semibold text-[#192837]/60 bg-white px-3 py-1.5 rounded-full border border-[#192837]/10 shadow-xs">
-            Total: <span className="text-[#192837] font-bold">{invoices.length}</span>
-          </span>
-          {surplusCount > 0 && (
-            <span className="text-xs font-semibold text-purple-700 bg-purple-50 px-3 py-1.5 rounded-full border border-purple-200 shadow-xs">
-              Surplus: <span className="font-bold">{surplusCount}</span>
-            </span>
-          )}
-        </div>
-      </div>
+              {autoPolling ? "Live sync on" : "Live sync paused"}
+            </Button>
+            <Button
+              variant="secondary"
+              size="sm"
+              iconOnly
+              icon={RefreshCw}
+              onClick={() => load(false)}
+              title={`Last sync: ${lastUpdated.toLocaleTimeString()}`}
+              aria-label="Refresh invoices"
+            />
+            <MetaPill label="Total" value={invoices.length} />
+            <MetaPill label="Duplicates" value={flaggedCount} tone="danger" />
+            <MetaPill label="Surplus" value={surplusCount} tone="purple" />
+          </>
+        }
+      />
 
       {error && (
-        <div className="p-4 rounded-xl bg-red-50 border border-red-200 text-red-700 text-xs font-medium flex items-center justify-between">
-          <div className="flex items-center gap-2">
-            <AlertCircle size={16} />
-            <span>{error}</span>
-          </div>
-          <button
-            onClick={() => setError(null)}
-            className="text-red-700 hover:text-red-900 cursor-pointer"
-          >
-            <X size={14} />
-          </button>
-        </div>
+        <Alert tone="danger" onDismiss={() => setError(null)}>
+          {error}
+        </Alert>
       )}
 
-      {/* Add Invoice Form */}
-      <div className="bg-white/95 rounded-2xl border border-[#192837]/8 p-5 sm:p-6 shadow-[0_4px_20px_-4px_rgba(25,40,55,0.05)]">
-        <div className="flex items-center gap-2 font-bold text-base text-[#192837] mb-4 pb-2 border-b border-[#192837]/5">
-          <Receipt size={18} className="text-[#7342E2]" />
-          <span>Submit Invoice for Real-Time Governance Evaluation</span>
-        </div>
-
-        <form onSubmit={handleSubmit} className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4">
-          <div>
-            <label className="block text-xs font-semibold text-[#192837] uppercase tracking-wider mb-1">
-              Invoice #
-            </label>
-            <input
-              type="text"
-              placeholder="e.g. INV-9042"
-              value={form.invoiceNumber}
-              onChange={(e) => {
-                setForm({ ...form, invoiceNumber: e.target.value });
-                if (formErrors.invoiceNumber) setFormErrors({ ...formErrors, invoiceNumber: null });
-              }}
-              className={`w-full px-3.5 py-2.5 bg-[#F5F5F3]/80 hover:bg-[#F5F5F3] focus:bg-white rounded-xl border text-[#192837] text-xs outline-none transition-all ${
-                formErrors.invoiceNumber ? "border-red-400 focus:border-red-500 ring-2 ring-red-100" : "border-[#192837]/10 focus:border-[#7342E2] focus:ring-4 focus:ring-[#7342E2]/15"
-              }`}
-            />
-            {formErrors.invoiceNumber && (
-              <p className="text-[10px] text-red-600 font-medium mt-1">{formErrors.invoiceNumber}</p>
-            )}
-          </div>
-
-          <div>
-            <label className="block text-xs font-semibold text-[#192837] uppercase tracking-wider mb-1">
-              Vendor Name
-            </label>
-            <input
-              type="text"
-              placeholder="e.g. Acme Corp"
-              value={form.vendorName}
-              onChange={(e) => {
-                setForm({ ...form, vendorName: e.target.value });
-                if (formErrors.vendorName) setFormErrors({ ...formErrors, vendorName: null });
-              }}
-              className={`w-full px-3.5 py-2.5 bg-[#F5F5F3]/80 hover:bg-[#F5F5F3] focus:bg-white rounded-xl border text-[#192837] text-xs outline-none transition-all ${
-                formErrors.vendorName ? "border-red-400 focus:border-red-500 ring-2 ring-red-100" : "border-[#192837]/10 focus:border-[#7342E2] focus:ring-4 focus:ring-[#7342E2]/15"
-              }`}
-            />
-            {formErrors.vendorName && (
-              <p className="text-[10px] text-red-600 font-medium mt-1">{formErrors.vendorName}</p>
-            )}
-          </div>
-
-          <div>
-            <label className="block text-xs font-semibold text-[#192837] uppercase tracking-wider mb-1">
-              Department
-            </label>
-            <select
-              value={form.department}
-              onChange={(e) => setForm({ ...form, department: e.target.value })}
-              className="w-full px-3.5 py-2.5 bg-[#F5F5F3]/80 hover:bg-[#F5F5F3] focus:bg-white rounded-xl border border-[#192837]/10 focus:border-[#7342E2] focus:ring-4 focus:ring-[#7342E2]/15 text-[#192837] text-xs outline-none transition-all cursor-pointer"
-            >
-              <option>Finance</option>
-              <option>HR</option>
-              <option>Operations</option>
-              <option>Inventory</option>
-            </select>
-          </div>
-
-          <div>
-            <label className="block text-xs font-semibold text-[#192837] uppercase tracking-wider mb-1">
-              Amount (₹)
-            </label>
-            <input
-              type="number"
-              placeholder="50000"
-              value={form.amount}
-              onChange={(e) => {
-                setForm({ ...form, amount: e.target.value });
-                if (formErrors.amount) setFormErrors({ ...formErrors, amount: null });
-              }}
-              className={`w-full px-3.5 py-2.5 bg-[#F5F5F3]/80 hover:bg-[#F5F5F3] focus:bg-white rounded-xl border text-[#192837] text-xs outline-none transition-all ${
-                formErrors.amount ? "border-red-400 focus:border-red-500 ring-2 ring-red-100" : "border-[#192837]/10 focus:border-[#7342E2] focus:ring-4 focus:ring-[#7342E2]/15"
-              }`}
-            />
-            {formErrors.amount && (
-              <p className="text-[10px] text-red-600 font-medium mt-1">{formErrors.amount}</p>
-            )}
-          </div>
-
-          <div>
-            <label className="block text-xs font-semibold text-[#192837] uppercase tracking-wider mb-1">
-              Date
-            </label>
-            <input
-              type="date"
-              value={form.invoiceDate}
-              onChange={(e) => setForm({ ...form, invoiceDate: e.target.value })}
-              className="w-full px-3.5 py-2.5 bg-[#F5F5F3]/80 hover:bg-[#F5F5F3] focus:bg-white rounded-xl border border-[#192837]/10 focus:border-[#7342E2] focus:ring-4 focus:ring-[#7342E2]/15 text-[#192837] text-xs outline-none transition-all"
-            />
-          </div>
-
-          <div className="sm:col-span-2 lg:col-span-5 flex justify-end mt-2">
-            <button
-              type="submit"
-              disabled={submitting}
-              className="w-full sm:w-auto px-6 py-2.5 rounded-xl font-bold text-xs text-white bg-[#7342E2] hover:bg-[#5c2ecc] shadow-lg shadow-[#7342E2]/25 hover:shadow-xl hover:shadow-[#7342E2]/35 hover:-translate-y-0.5 active:translate-y-0 transition-all flex items-center justify-center gap-2 cursor-pointer disabled:opacity-60 disabled:cursor-not-allowed"
-            >
-              <PlusCircle size={15} />
-              <span>{submitting ? "Evaluating Risk Engine..." : "Submit & Score Invoice"}</span>
-            </button>
-          </div>
-        </form>
-      </div>
-
-      {/* Search & Filter Toolbar */}
-      <div className="flex flex-col lg:flex-row items-center justify-between gap-3 bg-white/95 p-3.5 rounded-2xl border border-[#192837]/8 shadow-xs">
-        <div className="relative w-full lg:w-64">
-          <Search size={14} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-[#192837]/40" />
-          <input
-            type="text"
-            placeholder="Search invoice # or vendor..."
-            value={searchQuery}
-            onChange={(e) => {
-              setSearchQuery(e.target.value);
-              setCurrentPage(1);
-            }}
-            className="w-full pl-9 pr-3.5 py-2 bg-[#F5F5F3] rounded-xl text-xs text-[#192837] outline-none border border-transparent focus:border-[#7342E2] transition-all"
+      <Card>
+        <CardBody>
+          <CardHeader
+            icon={Receipt}
+            title="Submit an invoice for evaluation"
+            subtitle="Risk scoring, duplicate detection and YAML policy checks run synchronously on submit."
           />
-        </div>
 
-        <div className="flex flex-wrap items-center gap-2 w-full lg:w-auto justify-end">
-          {/* Department Filter */}
-          <select
+          <form
+            onSubmit={handleSubmit}
+            className="mt-5 grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-5"
+          >
+            <Field label="Invoice #" error={formErrors.invoiceNumber} htmlFor="invoiceNumber">
+              <Input
+                id="invoiceNumber"
+                type="text"
+                placeholder="e.g. INV-9042"
+                value={form.invoiceNumber}
+                invalid={Boolean(formErrors.invoiceNumber)}
+                onChange={(event) => {
+                  setForm({ ...form, invoiceNumber: event.target.value });
+                  if (formErrors.invoiceNumber) setFormErrors({ ...formErrors, invoiceNumber: null });
+                }}
+              />
+            </Field>
+
+            <Field label="Vendor name" error={formErrors.vendorName} htmlFor="vendorName">
+              <Input
+                id="vendorName"
+                type="text"
+                placeholder="e.g. Acme Corp"
+                value={form.vendorName}
+                invalid={Boolean(formErrors.vendorName)}
+                onChange={(event) => {
+                  setForm({ ...form, vendorName: event.target.value });
+                  if (formErrors.vendorName) setFormErrors({ ...formErrors, vendorName: null });
+                }}
+              />
+            </Field>
+
+            <Field label="Department" htmlFor="department">
+              <Select
+                id="department"
+                value={form.department}
+                onChange={(event) => setForm({ ...form, department: event.target.value })}
+              >
+                {DEPARTMENTS.map((department) => (
+                  <option key={department}>{department}</option>
+                ))}
+              </Select>
+            </Field>
+
+            <Field label="Amount (₹)" error={formErrors.amount} htmlFor="amount">
+              <Input
+                id="amount"
+                type="number"
+                placeholder="50000"
+                value={form.amount}
+                invalid={Boolean(formErrors.amount)}
+                onChange={(event) => {
+                  setForm({ ...form, amount: event.target.value });
+                  if (formErrors.amount) setFormErrors({ ...formErrors, amount: null });
+                }}
+              />
+            </Field>
+
+            <Field label="Invoice date" error={formErrors.invoiceDate} htmlFor="invoiceDate">
+              <Input
+                id="invoiceDate"
+                type="date"
+                value={form.invoiceDate}
+                invalid={Boolean(formErrors.invoiceDate)}
+                onChange={(event) => setForm({ ...form, invoiceDate: event.target.value })}
+              />
+            </Field>
+
+            <div className="flex justify-end sm:col-span-2 lg:col-span-5">
+              <Button type="submit" icon={PlusCircle} loading={submitting} className="w-full sm:w-auto">
+                {submitting ? "Evaluating risk engine…" : "Submit & score invoice"}
+              </Button>
+            </div>
+          </form>
+        </CardBody>
+      </Card>
+
+      <Card className="flex flex-col gap-3 p-3.5 xl:flex-row xl:items-center xl:justify-between">
+        <SearchInput
+          icon={Search}
+          placeholder="Search invoice # or vendor…"
+          value={searchQuery}
+          onChange={(event) => {
+            setSearchQuery(event.target.value);
+            setCurrentPage(1);
+          }}
+          className="w-full xl:w-72"
+          aria-label="Search invoices"
+        />
+
+        <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
+          <Select
+            size="sm"
             value={departmentFilter}
-            onChange={(e) => {
-              setDepartmentFilter(e.target.value);
+            onChange={(event) => {
+              setDepartmentFilter(event.target.value);
               setCurrentPage(1);
             }}
-            className="px-3 py-2 bg-[#F5F5F3] rounded-xl text-xs font-medium text-[#192837] outline-none border border-transparent focus:border-[#7342E2] transition-all cursor-pointer"
+            aria-label="Filter by department"
           >
-            <option value="ALL">All Departments</option>
-            <option value="Finance">Finance</option>
-            <option value="HR">HR</option>
-            <option value="Operations">Operations</option>
-            <option value="Inventory">Inventory</option>
-          </select>
+            <option value="ALL">All departments</option>
+            {DEPARTMENTS.map((department) => (
+              <option key={department} value={department}>
+                {department}
+              </option>
+            ))}
+          </Select>
 
-          {/* Sentry Level Filter */}
-          <select
+          <Select
+            size="sm"
             value={sentryFilter}
-            onChange={(e) => {
-              setSentryFilter(e.target.value);
+            onChange={(event) => {
+              setSentryFilter(event.target.value);
               setCurrentPage(1);
             }}
-            className="px-3 py-2 bg-[#F5F5F3] rounded-xl text-xs font-bold text-[#192837] outline-none border border-transparent focus:border-[#7342E2] transition-all cursor-pointer"
+            aria-label="Filter by sentry level"
           >
-            <option value="ALL">All Sentry Levels</option>
-            <option value="GREEN">Sentry GREEN (0–3 Low)</option>
-            <option value="YELLOW">Sentry YELLOW (4–6 Med)</option>
-            <option value="ORANGE">Sentry ORANGE (7–8 High)</option>
-            <option value="RED">Sentry RED (9–10 Critical)</option>
-          </select>
+            <option value="ALL">All sentry levels</option>
+            <option value="GREEN">GREEN · low (0–3)</option>
+            <option value="YELLOW">YELLOW · medium (4–6)</option>
+            <option value="ORANGE">ORANGE · high (7–8)</option>
+            <option value="RED">RED · critical (9–10)</option>
+          </Select>
 
-          {/* Surplus Expense Filter */}
-          <select
+          <Select
+            size="sm"
             value={surplusFilter}
-            onChange={(e) => {
-              setSurplusFilter(e.target.value);
+            onChange={(event) => {
+              setSurplusFilter(event.target.value);
               setCurrentPage(1);
             }}
-            className="px-3 py-2 bg-[#F5F5F3] rounded-xl text-xs font-bold text-purple-800 outline-none border border-transparent focus:border-purple-600 transition-all cursor-pointer"
+            aria-label="Filter by surplus flag"
           >
-            <option value="ALL">All Expenses</option>
-            <option value="SURPLUS_ONLY">Surplus Flagged (&gt;1.5x Dept / &gt;2x Vendor)</option>
-            <option value="DEPT_ONLY">&gt;1.5x Dept Average Only</option>
-            <option value="VENDOR_ONLY">&gt;2.0x Vendor Average Only</option>
-          </select>
+            <option value="ALL">All expenses</option>
+            <option value="SURPLUS_ONLY">Surplus flagged</option>
+            <option value="DEPT_ONLY">&gt; 1.5× dept avg</option>
+            <option value="VENDOR_ONLY">&gt; 2× vendor avg</option>
+          </Select>
 
-          {/* Status Filter */}
-          <select
+          <Select
+            size="sm"
             value={statusFilter}
-            onChange={(e) => {
-              setStatusFilter(e.target.value);
+            onChange={(event) => {
+              setStatusFilter(event.target.value);
               setCurrentPage(1);
             }}
-            className="px-3 py-2 bg-[#F5F5F3] rounded-xl text-xs font-medium text-[#192837] outline-none border border-transparent focus:border-[#7342E2] transition-all cursor-pointer"
+            aria-label="Filter by status"
           >
-            <option value="ALL">All Statuses</option>
+            <option value="ALL">All statuses</option>
             <option value="PENDING">Pending</option>
             <option value="APPROVED">Approved</option>
             <option value="REJECTED">Rejected</option>
             <option value="FLAGGED">Flagged</option>
-          </select>
+          </Select>
         </div>
-      </div>
+      </Card>
 
-      {/* Invoices Table Card */}
-      <div className="bg-white/95 rounded-2xl border border-[#192837]/8 shadow-[0_4px_20px_-4px_rgba(25,40,55,0.05)] overflow-hidden">
+      <Card className="overflow-hidden">
         {pageLoading ? (
-          <LoadingSkeleton rows={5} cols={8} />
+          <LoadingSkeleton rows={5} cols={7} />
         ) : (
-          <div className="overflow-x-auto">
-            <table className="w-full text-left text-xs">
-              <thead className="bg-[#F5F5F3]/80 border-b border-[#192837]/8 text-[#192837]/60 uppercase font-semibold text-[11px] tracking-wider">
-                <tr>
-                  <th className="px-5 py-3.5">Invoice #</th>
-                  <th className="px-5 py-3.5">Vendor</th>
-                  <th className="px-5 py-3.5">Department</th>
-                  <th className="px-5 py-3.5">Amount</th>
-                  <th className="px-5 py-3.5">Flags & Surplus</th>
-                  <th className="px-5 py-3.5">Sentry Level & Risk</th>
-                  <th className="px-5 py-3.5">Status</th>
-                  <th className="px-5 py-3.5 text-right">Actions</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-[#192837]/5 text-[#192837]">
-                {paginatedInvoices.map((inv) => {
-                  const statusBadgeClass = STATUS_BADGES[inv.status] || "bg-gray-100 text-gray-700 border-gray-200";
-                  const isDeptSurplus = inv.surplusExpenseFlag;
-                  const isVendorSurplus = inv.vendorSurplusFlag;
-
-                  return (
-                    <tr key={inv.id} className="hover:bg-[#7342E2]/[0.02] transition-colors">
-                      <td className="px-5 py-4 font-mono font-semibold text-[#192837]">
-                        {inv.invoiceNumber}
-                      </td>
-                      <td className="px-5 py-4 font-medium flex items-center gap-1.5">
-                        <Building2 size={14} className="text-[#192837]/40 flex-shrink-0" />
-                        <span>{inv.vendorName}</span>
-                      </td>
-                      <td className="px-5 py-4 text-[#192837]/70 font-medium">
-                        {inv.department}
-                      </td>
-                      <td className="px-5 py-4 font-bold text-[#192837]">
-                        ₹{inv.amount?.toLocaleString()}
-                      </td>
-                      <td className="px-5 py-4">
-                        <div className="flex flex-wrap items-center gap-1.5">
-                          {/* Surplus Expense Flags */}
-                          {isDeptSurplus && isVendorSurplus ? (
-                            <span
-                              className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-purple-100 text-purple-900 border border-purple-300"
-                              title={`Exceeds 1.5x Dept Avg (₹${inv.departmentAverage?.toLocaleString()}) & 2x Vendor Avg (₹${inv.vendorAverage?.toLocaleString()})`}
-                            >
-                              <Zap size={11} className="text-purple-600" />
-                              Dual Surplus
-                            </span>
-                          ) : isDeptSurplus ? (
-                            <span
-                              className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-purple-100 text-purple-800 border border-purple-200"
-                              title={`Exceeds 1.5x Department Avg (₹${inv.departmentAverage?.toLocaleString()})`}
-                            >
-                              <Zap size={11} className="text-purple-600" />
-                              Dept Surplus (&gt;1.5x)
-                            </span>
-                          ) : isVendorSurplus ? (
-                            <span
-                              className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-pink-100 text-pink-800 border border-pink-200"
-                              title={`Exceeds 2.0x Vendor Avg (₹${inv.vendorAverage?.toLocaleString()})`}
-                            >
-                              <Building2 size={11} className="text-pink-600" />
-                              Vendor Surplus (&gt;2x)
-                            </span>
-                          ) : null}
-
-                          {inv.duplicateFlag && (
-                            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-red-100 text-red-700">
-                              Duplicate
-                            </span>
-                          )}
-                          {inv.anomalyFlag ? (
-                            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-amber-100 text-amber-800">
-                              Anomaly
-                            </span>
-                          ) : (
-                            !inv.duplicateFlag && !isDeptSurplus && !isVendorSurplus && (
-                              <span className="text-[11px] text-[#192837]/50 font-medium">Standard</span>
-                            )
-                          )}
-                        </div>
-                      </td>
-                      <td className="px-5 py-4">
-                        <div className="flex flex-col gap-1">
-                          <div className="flex items-center gap-1.5">
-                            <RiskBadge score={inv.riskScore || 0} sentryLevel={inv.sentryLevel} />
-                            <span className="text-[10px] font-mono font-bold text-[#7342E2]">
-                              RF: {Math.round((inv.mlRiskProbability || 0) * 100)}%
-                            </span>
-                          </div>
-                          {inv.policyAction && inv.policyAction !== "ALLOW" && (
-                            <span className="inline-flex items-center gap-1 text-[9px] font-bold text-amber-800 bg-amber-100 px-1.5 py-0.5 rounded w-fit">
-                              Policy: {inv.policyAction}
-                            </span>
-                          )}
-                        </div>
-                      </td>
-                      <td className="px-5 py-4">
-                        <span className={`inline-block px-2.5 py-1 rounded-full text-[11px] font-semibold border ${statusBadgeClass}`}>
-                          {inv.status}
-                        </span>
-                      </td>
-                      <td className="px-5 py-4 text-right">
-                        <div className="inline-flex items-center gap-1.5 justify-end">
-                          <button
-                            onClick={() => setSelectedInvoice(inv)}
-                            className="px-2.5 py-1.5 rounded-lg bg-[#7342E2]/10 text-[#7342E2] hover:bg-[#7342E2]/20 font-semibold text-[11px] transition-colors flex items-center gap-1 cursor-pointer"
-                            title="Explain AI/LLM Risk & Surplus Analysis"
-                          >
-                            <BrainCircuit size={13} />
-                            <span>Explain</span>
-                          </button>
-                          {inv.status !== "APPROVED" && inv.status !== "REJECTED" ? (
-                            <>
-                              <button
-                                onClick={() => handleStatusChange(inv, "APPROVED")}
-                                className="p-1.5 rounded-lg bg-emerald-50 text-emerald-600 hover:bg-emerald-100 border border-emerald-200 transition-colors cursor-pointer"
-                                title="Approve"
-                              >
-                                <CheckCircle2 size={15} />
-                              </button>
-                              <button
-                                onClick={() => handleStatusChange(inv, "REJECTED")}
-                                className="p-1.5 rounded-lg bg-red-50 text-red-600 hover:bg-red-100 border border-red-200 transition-colors cursor-pointer"
-                                title="Reject"
-                              >
-                                <XCircle size={15} />
-                              </button>
-                            </>
-                          ) : null}
-                          <button
-                            onClick={() => setInvoiceToDelete(inv)}
-                            className="p-1.5 rounded-lg hover:bg-red-50 text-[#192837]/40 hover:text-red-600 transition-colors cursor-pointer"
-                            title="Delete"
-                          >
-                            <Trash2 size={13} />
-                          </button>
-                        </div>
-                      </td>
-                    </tr>
-                  );
-                })}
-                {paginatedInvoices.length === 0 && (
-                  <tr>
-                    <td colSpan={8} className="px-5 py-10 text-center text-[#192837]/50">
-                      No invoices match the specified search or filter criteria.
-                    </td>
-                  </tr>
-                )}
-              </tbody>
-            </table>
-          </div>
+          <Table>
+            <THead>
+              <Th>Invoice #</Th>
+              <Th>Vendor</Th>
+              <Th>Department</Th>
+              <Th className="text-right">Amount</Th>
+              <Th>Flags</Th>
+              <Th>Sentry / risk</Th>
+              <Th>Status</Th>
+              <Th className="text-right">Actions</Th>
+            </THead>
+            <TBody>
+              {paginatedInvoices.map((invoice) => (
+                <Tr key={invoice.id}>
+                  <Td className="whitespace-nowrap font-mono text-xs font-semibold">
+                    {invoice.invoiceNumber}
+                  </Td>
+                  <Td>
+                    <div className="flex items-center gap-1.5 font-medium">
+                      <Building2 size={14} className="shrink-0 text-ink-subtle" />
+                      {invoice.vendorName}
+                    </div>
+                  </Td>
+                  <Td className="text-xs font-medium text-ink-muted">{invoice.department}</Td>
+                  <Td className="num whitespace-nowrap text-right font-bold">
+                    ₹{invoice.amount?.toLocaleString()}
+                  </Td>
+                  <Td>{renderFlagCell(invoice)}</Td>
+                  <Td>
+                    <div className="flex flex-col items-start gap-1">
+                      <RiskBadge score={invoice.riskScore || 0} sentryLevel={invoice.sentryLevel} />
+                      <span className="num text-[10px] font-bold text-accent">
+                        RF {Math.round((invoice.mlRiskProbability || 0) * 100)}%
+                      </span>
+                      {invoice.policyAction && invoice.policyAction !== "ALLOW" && (
+                        <Badge tone="warning" size="sm">
+                          {invoice.policyAction}
+                        </Badge>
+                      )}
+                    </div>
+                  </Td>
+                  <Td>
+                    <Badge tone={STATUS_TONES[invoice.status] || "neutral"} dot>
+                      {invoice.status}
+                    </Badge>
+                  </Td>
+                  <Td className="text-right">
+                    <div className="inline-flex items-center justify-end gap-1.5">
+                      <Button
+                        variant="subtle"
+                        size="xs"
+                        icon={BrainCircuit}
+                        onClick={() => setSelectedInvoice(invoice)}
+                        title="Explain AI risk & surplus analysis"
+                      >
+                        Explain
+                      </Button>
+                      {invoice.status !== "APPROVED" && invoice.status !== "REJECTED" && (
+                        <>
+                          <Button
+                            variant="secondary"
+                            size="xs"
+                            iconOnly
+                            icon={CheckCircle2}
+                            onClick={() => handleStatusChange(invoice, "APPROVED")}
+                            title="Approve"
+                            aria-label={`Approve ${invoice.invoiceNumber}`}
+                            className="text-success"
+                          />
+                          <Button
+                            variant="secondary"
+                            size="xs"
+                            iconOnly
+                            icon={XCircle}
+                            onClick={() => handleStatusChange(invoice, "REJECTED")}
+                            title="Reject"
+                            aria-label={`Reject ${invoice.invoiceNumber}`}
+                            className="text-danger"
+                          />
+                        </>
+                      )}
+                      <button
+                        type="button"
+                        onClick={() => setInvoiceToDelete(invoice)}
+                        title="Delete"
+                        aria-label={`Delete ${invoice.invoiceNumber}`}
+                        className="inline-flex h-7 w-7 items-center justify-center rounded-lg text-ink-subtle transition-colors hover:bg-danger/10 hover:text-danger"
+                      >
+                        <Trash2 size={13} />
+                      </button>
+                    </div>
+                  </Td>
+                </Tr>
+              ))}
+            </TBody>
+          </Table>
         )}
 
-        {/* Pagination Controls */}
-        <div className="px-5 py-3 bg-[#F5F5F3]/50 border-t border-[#192837]/8 flex items-center justify-between">
-          <span className="text-xs text-[#192837]/60">
-            Showing Page <strong>{currentPage}</strong> of <strong>{totalPages}</strong> ({filteredInvoices.length} total)
+        {!pageLoading && paginatedInvoices.length === 0 && (
+          <EmptyState
+            icon={Receipt}
+            title="No invoices match these filters"
+            description="Adjust the search term, sentry level, surplus or status filter to widen the result set."
+          />
+        )}
+
+        <div className="flex flex-wrap items-center justify-between gap-3 border-t border-line bg-surface-2/60 px-5 py-3">
+          <span className="text-xs text-ink-muted">
+            Page <strong className="text-ink">{safePage}</strong> of{" "}
+            <strong className="text-ink">{totalPages}</strong> ·{" "}
+            <span className="num">{filteredInvoices.length}</span> matching invoices
           </span>
-          <div className="flex items-center gap-1">
-            <button
-              onClick={() => setCurrentPage((p) => Math.max(1, p - 1))}
-              disabled={currentPage === 1}
-              className="p-1.5 rounded-lg border border-[#192837]/10 bg-white text-[#192837] hover:bg-gray-50 disabled:opacity-40 disabled:cursor-not-allowed cursor-pointer"
-            >
-              <ChevronLeft size={14} />
-            </button>
-            <button
-              onClick={() => setCurrentPage((p) => Math.min(totalPages, p + 1))}
-              disabled={currentPage >= totalPages}
-              className="p-1.5 rounded-lg border border-[#192837]/10 bg-white text-[#192837] hover:bg-gray-50 disabled:opacity-40 disabled:cursor-not-allowed cursor-pointer"
-            >
-              <ChevronRight size={14} />
-            </button>
+          <div className="flex items-center gap-1.5">
+            <Button
+              variant="secondary"
+              size="xs"
+              iconOnly
+              icon={ChevronLeft}
+              onClick={() => setCurrentPage((page) => Math.max(1, page - 1))}
+              disabled={safePage <= 1}
+              aria-label="Previous page"
+            />
+            <Button
+              variant="secondary"
+              size="xs"
+              iconOnly
+              icon={ChevronRight}
+              onClick={() => setCurrentPage((page) => Math.min(totalPages, page + 1))}
+              disabled={safePage >= totalPages}
+              aria-label="Next page"
+            />
           </div>
         </div>
-      </div>
+      </Card>
 
-      {/* Delete Confirmation Modal */}
       <ConfirmModal
         isOpen={Boolean(invoiceToDelete)}
-        title="Delete Invoice"
-        message={`Are you sure you want to permanently delete invoice ${invoiceToDelete?.invoiceNumber}? This action will be audited.`}
+        title="Delete invoice"
+        message={`Permanently delete invoice ${invoiceToDelete?.invoiceNumber || ""}? This action is recorded in the audit trail.`}
         confirmText="Delete"
         onConfirm={handleDelete}
         onCancel={() => setInvoiceToDelete(null)}
       />
 
-      {/* Comprehensive Explain Modal: Multi-Model + YAML Policies + Surplus + LLM Advisory */}
-      {selectedInvoice && (
-        <div
-          role="dialog"
-          aria-modal="true"
-          aria-labelledby="audit-modal-title"
-          className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-[#192837]/50 backdrop-blur-sm animate-fade-in cursor-pointer"
-          onClick={() => setSelectedInvoice(null)}
-        >
-          <div
-            className="bg-white rounded-3xl border border-[#192837]/10 shadow-2xl max-w-3xl w-full max-h-[90vh] overflow-y-auto cursor-default flex flex-col"
-            onClick={(e) => e.stopPropagation()}
-          >
-            {/* Modal Header */}
-            <div className="sticky top-0 bg-white/95 backdrop-blur px-6 py-4 border-b border-[#192837]/8 flex items-center justify-between z-10">
-              <div className="flex items-center gap-2.5">
-                <div className="w-9 h-9 rounded-xl bg-[#7342E2]/10 text-[#7342E2] flex items-center justify-center">
-                  <BrainCircuit size={20} />
-                </div>
-                <div>
-                  <div className="flex items-center gap-2">
-                    <h3
-                      id="audit-modal-title"
-                      className="font-extrabold text-base text-[#192837]"
-                      style={{ fontFamily: "var(--font-heading)" }}
-                    >
-                      Audit & Advisory Intelligence: {selectedInvoice.invoiceNumber}
-                    </h3>
-                    <RiskBadge
-                      score={selectedInvoice.riskScore || 0}
-                      sentryLevel={selectedInvoice.sentryLevel}
-                    />
-                  </div>
-                  <p className="text-xs text-[#192837]/60">
-                    Vendor: <strong className="text-[#192837]">{selectedInvoice.vendorName}</strong> •
-                    Department: <strong className="text-[#192837]">{selectedInvoice.department}</strong>
-                  </p>
-                </div>
+      <ConfirmModal
+        isOpen={Boolean(criticalApprovalInvoice)}
+        title="Four-Eyes Dual Authorization Required"
+        message={`Invoice ${criticalApprovalInvoice?.invoiceNumber || ""} is designated Sentry RED (Score ${criticalApprovalInvoice?.riskScore || 0}/10 - Critical Risk). Approving this invoice releases an active disbursement hold. This authorization will be cryptographically signed and logged in the immutable audit ledger.`}
+        confirmText="Authorize & Release Hold"
+        onConfirm={() => {
+          const inv = criticalApprovalInvoice;
+          setCriticalApprovalInvoice(null);
+          executeStatusChange(inv, "APPROVED");
+        }}
+        onCancel={() => setCriticalApprovalInvoice(null)}
+      />
+
+      <Modal
+        isOpen={Boolean(selectedInvoice)}
+        onClose={() => setSelectedInvoice(null)}
+        size="lg"
+        icon={BrainCircuit}
+        title={
+          selectedInvoice
+            ? `Audit & advisory · ${selectedInvoice.invoiceNumber}`
+            : "Audit & advisory"
+        }
+        description={
+          selectedInvoice
+            ? `${selectedInvoice.vendorName} · ${selectedInvoice.department} · ₹${selectedInvoice.amount?.toLocaleString()}`
+            : undefined
+        }
+        footer={
+          selectedInvoice && (
+            <>
+              <span className="text-xs font-medium text-ink-muted">
+                Status:{" "}
+                <strong className="text-ink">{selectedInvoice.status}</strong>
+              </span>
+              <div className="flex flex-wrap items-center gap-2">
+                {selectedInvoice.status !== "APPROVED" &&
+                  selectedInvoice.status !== "REJECTED" && (
+                    <>
+                      <Button
+                        variant="dangerSubtle"
+                        size="sm"
+                        onClick={() => {
+                          handleStatusChange(selectedInvoice, "REJECTED");
+                          setSelectedInvoice(null);
+                        }}
+                      >
+                        Reject invoice
+                      </Button>
+                      <Button
+                        variant="success"
+                        size="sm"
+                        icon={CheckCircle2}
+                        onClick={() => {
+                          handleStatusChange(selectedInvoice, "APPROVED");
+                          setSelectedInvoice(null);
+                        }}
+                      >
+                        Approve invoice
+                      </Button>
+                    </>
+                  )}
+                <Button variant="secondary" size="sm" onClick={() => setSelectedInvoice(null)}>
+                  Close
+                </Button>
               </div>
-              <button
-                type="button"
-                onClick={() => setSelectedInvoice(null)}
-                aria-label="Close dialog"
-                className="w-8 h-8 rounded-xl bg-[#192837]/5 hover:bg-[#192837]/10 text-[#192837]/70 hover:text-[#192837] flex items-center justify-center transition-colors cursor-pointer"
-              >
-                <X size={18} />
-              </button>
-            </div>
-
-            {/* Modal Body */}
-            <div className="p-6 space-y-5">
-              {/* 4 Multi-Model Cards */}
-              <div className="grid grid-cols-1 sm:grid-cols-4 gap-3">
-                {/* 1. Final Risk Score & Sentry Level */}
-                <div className="p-3.5 rounded-2xl bg-[#F5F5F3] border border-[#192837]/8 text-center">
-                  <span className="text-[10px] uppercase font-bold tracking-wider text-[#192837]/60 block mb-1">
-                    Sentry Level
+            </>
+          )
+        }
+      >
+        {selectedInvoice && (
+          <div className="space-y-5">
+            <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+              <MetricTile label="Sentry level">
+                <div className="flex items-center justify-center gap-1">
+                  <span className="num text-xl font-extrabold text-ink">
+                    {selectedInvoice.riskScore || 0}
                   </span>
-                  <div className="flex items-center justify-center gap-1">
-                    <span className="text-2xl font-black text-[#192837]">
-                      {selectedInvoice.riskScore || 0}
-                    </span>
-                    <span className="text-xs font-semibold text-[#192837]/40">/ 10</span>
-                  </div>
-                  <div className="mt-1.5 flex justify-center">
-                    <RiskBadge
-                      score={selectedInvoice.riskScore || 0}
-                      sentryLevel={selectedInvoice.sentryLevel}
-                    />
-                  </div>
+                  <span className="text-[11px] text-ink-subtle">/10</span>
                 </div>
+                <div className="mt-1.5 flex justify-center">
+                  <RiskBadge
+                    score={selectedInvoice.riskScore || 0}
+                    sentryLevel={selectedInvoice.sentryLevel}
+                  />
+                </div>
+              </MetricTile>
 
-                {/* 2. Primary: Random Forest */}
-                <div className="p-3.5 rounded-2xl bg-[#F5F5F3] border border-[#192837]/8 text-center">
-                  <span className="text-[10px] uppercase font-bold tracking-wider text-[#192837]/60 block mb-1">
-                    Primary: Random Forest
-                  </span>
-                  <div className="flex items-center justify-center gap-1 text-[#7342E2]">
-                    <TrendingUp size={16} />
-                    <span className="text-xl font-black">
-                      {Math.round((selectedInvoice.mlRiskProbability || 0) * 100)}%
-                    </span>
-                  </div>
-                  <span className="text-[10px] text-[#192837]/50 mt-1 block">
-                    Weight: 55% Blended
+              <MetricTile label="Primary · RF">
+                <div className="flex items-center justify-center gap-1 text-accent">
+                  <TrendingUp size={15} />
+                  <span className="num text-lg font-extrabold">
+                    {Math.round((selectedInvoice.mlRiskProbability || 0) * 100)}%
                   </span>
                 </div>
+                <span className="mt-1 block text-[10px] text-ink-subtle">55% blended weight</span>
+              </MetricTile>
 
-                {/* 3. Secondary: XGBoost */}
-                <div className="p-3.5 rounded-2xl bg-[#F5F5F3] border border-[#192837]/8 text-center">
-                  <span className="text-[10px] uppercase font-bold tracking-wider text-[#192837]/60 block mb-1">
-                    Secondary: XGBoost
-                  </span>
-                  <div className="flex items-center justify-center gap-1 text-indigo-600">
-                    <Zap size={16} />
-                    <span className="text-xl font-black">
-                      {selectedInvoice.secondaryModelRiskProbability !== undefined && selectedInvoice.secondaryModelRiskProbability !== null
-                        ? Math.round(selectedInvoice.secondaryModelRiskProbability * 100)
-                        : Math.round((selectedInvoice.mlRiskProbability || 0) * 100)}%
-                    </span>
-                  </div>
-                  <span className="text-[10px] font-semibold text-emerald-700 mt-1 block">
-                    {selectedInvoice.modelAgreement || "CONCORDANT"}
+              <MetricTile label="Secondary · XGB">
+                <div className="flex items-center justify-center gap-1 text-info">
+                  <Zap size={15} />
+                  <span className="num text-lg font-extrabold">
+                    {selectedInvoice.secondaryModelRiskProbability !== undefined &&
+                    selectedInvoice.secondaryModelRiskProbability !== null
+                      ? Math.round(selectedInvoice.secondaryModelRiskProbability * 100)
+                      : Math.round((selectedInvoice.mlRiskProbability || 0) * 100)}
+                    %
                   </span>
                 </div>
+                <span className="mt-1 block text-[10px] font-semibold text-success">
+                  {selectedInvoice.modelAgreement || "CONCORDANT"}
+                </span>
+              </MetricTile>
 
-                {/* 4. Anomaly: Isolation Forest */}
-                <div className="p-3.5 rounded-2xl bg-[#F5F5F3] border border-[#192837]/8 text-center">
-                  <span className="text-[10px] uppercase font-bold tracking-wider text-[#192837]/60 block mb-1">
-                    Isolation Forest
-                  </span>
-                  <div className="flex items-center justify-center gap-1 mt-0.5">
-                    {selectedInvoice.anomalyFlag ? (
-                      <span className="inline-flex items-center gap-1 text-[11px] font-bold text-amber-700 bg-amber-100 px-2 py-0.5 rounded-full">
-                        <ShieldAlert size={12} /> Anomaly
-                      </span>
-                    ) : (
-                      <span className="inline-flex items-center gap-1 text-[11px] font-bold text-emerald-700 bg-emerald-100 px-2 py-0.5 rounded-full">
-                        <ShieldCheck size={12} /> Normal
-                      </span>
-                    )}
-                  </div>
-                  <span className="text-[10px] text-[#192837]/50 mt-1.5 block">
-                    Score: {selectedInvoice.anomalyScore ? selectedInvoice.anomalyScore.toFixed(3) : "0.000"}
-                  </span>
-                </div>
-              </div>
-
-              {/* SURPLUS EXPENSE FLAGGING ANALYSIS CARD */}
-              <div className={`p-4 rounded-2xl border text-xs ${
-                selectedInvoice.surplusExpenseFlag || selectedInvoice.vendorSurplusFlag
-                  ? "bg-purple-50/70 border-purple-200/80 text-purple-950"
-                  : "bg-gray-50/70 border-gray-200/80 text-gray-800"
-              }`}>
-                <div className="flex items-center justify-between font-bold mb-2">
-                  <div className="flex items-center gap-1.5 text-purple-900">
-                    <Scale size={15} className="text-purple-600" />
-                    <span>Surplus Expense Flagging Analysis</span>
-                  </div>
-                  {selectedInvoice.surplusExpenseFlag || selectedInvoice.vendorSurplusFlag ? (
-                    <span className="px-2 py-0.5 rounded-full text-[10px] font-black uppercase bg-purple-200 text-purple-900 border border-purple-300">
-                      Surplus Threshold Exceeded
-                    </span>
+              <MetricTile label="Isolation forest">
+                <div className="flex items-center justify-center">
+                  {selectedInvoice.anomalyFlag ? (
+                    <Badge tone="warning" icon={ShieldAlert}>
+                      Anomaly
+                    </Badge>
                   ) : (
-                    <span className="px-2 py-0.5 rounded-full text-[10px] font-semibold uppercase bg-emerald-100 text-emerald-800">
-                      Normal Expense Ratio
-                    </span>
+                    <Badge tone="success" icon={ShieldCheck}>
+                      Normal
+                    </Badge>
                   )}
                 </div>
+                <span className="num mt-1.5 block text-[10px] text-ink-subtle">
+                  Score {selectedInvoice.anomalyScore ? selectedInvoice.anomalyScore.toFixed(3) : "0.000"}
+                </span>
+              </MetricTile>
+            </div>
 
-                <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 pt-1">
-                  <div className="p-2.5 rounded-xl bg-white border border-[#192837]/5">
-                    <span className="text-[10px] text-[#192837]/60 block font-medium">Invoice Amount</span>
-                    <span className="text-sm font-bold text-[#192837]">
-                      ₹{selectedInvoice.amount?.toLocaleString()}
-                    </span>
-                  </div>
-
-                  <div className="p-2.5 rounded-xl bg-white border border-[#192837]/5">
-                    <div className="flex items-center justify-between">
-                      <span className="text-[10px] text-[#192837]/60 font-medium">Dept Average</span>
-                      <span className="text-[10px] font-bold text-purple-700">1.5x Limit</span>
-                    </div>
-                    <span className="text-sm font-bold text-[#192837]">
-                      ₹{(selectedInvoice.departmentAverage || 50000).toLocaleString()}
-                    </span>
-                    <span className="text-[10px] text-[#192837]/50 block mt-0.5">
-                      Threshold: ₹{((selectedInvoice.departmentAverage || 50000) * 1.5).toLocaleString()}
-                      {selectedInvoice.surplusExpenseFlag && (
-                        <strong className="text-purple-700 ml-1 font-bold">(&gt; 1.5x VIOLATION)</strong>
-                      )}
-                    </span>
-                  </div>
-
-                  <div className="p-2.5 rounded-xl bg-white border border-[#192837]/5">
-                    <div className="flex items-center justify-between">
-                      <span className="text-[10px] text-[#192837]/60 font-medium">Vendor Average</span>
-                      <span className="text-[10px] font-bold text-pink-700">2.0x Limit</span>
-                    </div>
-                    <span className="text-sm font-bold text-[#192837]">
-                      ₹{(selectedInvoice.vendorAverage || selectedInvoice.departmentAverage || 50000).toLocaleString()}
-                    </span>
-                    <span className="text-[10px] text-[#192837]/50 block mt-0.5">
-                      Threshold: ₹{(((selectedInvoice.vendorAverage || selectedInvoice.departmentAverage || 50000)) * 2.0).toLocaleString()}
-                      {selectedInvoice.vendorSurplusFlag && (
-                        <strong className="text-pink-700 ml-1 font-bold">(&gt; 2.0x VIOLATION)</strong>
-                      )}
-                    </span>
-                  </div>
-                </div>
-              </div>
-
-              {/* YAML Policy Engine Evaluation Banner */}
-              <div className="p-4 rounded-2xl bg-amber-50/70 border border-amber-200/80 text-xs">
-                <div className="flex items-center justify-between font-bold mb-1.5">
-                  <div className="flex items-center gap-1.5 text-amber-900">
-                    <Sliders size={14} className="text-[#7342E2]" />
-                    <span>YAML Policy Engine Evaluation (SpEL Rules)</span>
-                  </div>
-                  <span className="px-2 py-0.5 rounded-full text-[10px] font-black uppercase bg-amber-200/80 text-amber-950">
-                    Action: {selectedInvoice.policyAction || "ALLOW"}
-                  </span>
-                </div>
-                {selectedInvoice.triggeredPolicies && selectedInvoice.triggeredPolicies.length > 0 ? (
-                  <div className="space-y-1">
-                    <span className="text-[11px] text-amber-900/80 block font-medium">
-                      Matched Rules:
-                    </span>
-                    <div className="flex flex-wrap gap-1.5">
-                      {selectedInvoice.triggeredPolicies.map((p, idx) => (
-                        <span
-                          key={idx}
-                          className="font-mono text-[11px] font-bold px-2 py-0.5 rounded-md bg-amber-200 text-amber-900 border border-amber-300"
-                        >
-                          {p}
-                        </span>
-                      ))}
-                    </div>
-                  </div>
+            <section
+              className={`rounded-2xl border p-4 ${
+                selectedInvoice.surplusExpenseFlag || selectedInvoice.vendorSurplusFlag
+                  ? "border-violet-500/30 bg-violet-500/[0.06]"
+                  : "border-line bg-surface-2"
+              }`}
+            >
+              <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
+                <span className="inline-flex items-center gap-1.5 text-xs font-bold text-ink">
+                  <Scale size={15} className="text-violet-500" />
+                  Surplus expense analysis
+                </span>
+                {selectedInvoice.surplusExpenseFlag || selectedInvoice.vendorSurplusFlag ? (
+                  <Badge tone="purple" size="sm">
+                    Threshold exceeded
+                  </Badge>
                 ) : (
-                  <span className="text-emerald-800 font-medium">
-                    No policy triggers violated. Standard straight-through authorization.
-                  </span>
+                  <Badge tone="success" size="sm">
+                    Normal expense ratio
+                  </Badge>
                 )}
               </div>
 
-              {/* LLM Advisory Service Briefing */}
-              <div className="p-4 rounded-2xl bg-gradient-to-br from-[#7342E2]/10 via-[#7342E2]/5 to-transparent border border-[#7342E2]/25 text-[#192837] text-xs shadow-xs">
-                <div className="flex items-center justify-between font-bold text-[#7342E2] mb-1.5">
-                  <div className="flex items-center gap-1.5">
-                    <Sparkles size={15} />
-                    <span className="tracking-wide uppercase text-[11px]">
-                      LLM Advisory Service — Natural Language Explanation
-                    </span>
-                  </div>
-                  <span className="text-[9px] uppercase font-bold px-2 py-0.5 rounded-full bg-white text-[#7342E2] border border-[#7342E2]/20">
-                    Advisory Layer (Non-Overriding)
+              <div className="grid grid-cols-1 gap-2.5 sm:grid-cols-3">
+                <div className="rounded-xl border border-line bg-surface p-2.5">
+                  <span className="block text-[10px] font-medium text-ink-subtle">Invoice amount</span>
+                  <span className="num text-sm font-bold text-ink">
+                    ₹{selectedInvoice.amount?.toLocaleString()}
                   </span>
                 </div>
-                <p className="text-[#192837]/90 leading-relaxed font-medium text-xs pt-1">
-                  {selectedInvoice.llmExplanation ||
-                    selectedInvoice.mlExplanation ||
-                    "Evaluated via enterprise ML ensemble and deterministic policy rules."}
-                </p>
-                <div className="mt-2 pt-2 border-t border-[#7342E2]/15 flex items-center justify-between text-[10px] text-[#192837]/50">
-                  <span>Provider: Gemini 1.5 Flash / OpenAI GPT-4o with deterministic rule fallback</span>
-                  <span className="font-semibold text-emerald-700">Governance Policy Invariant: Decision Authority Intact</span>
+
+                <div className="rounded-xl border border-line bg-surface p-2.5">
+                  <div className="flex items-center justify-between">
+                    <span className="text-[10px] font-medium text-ink-subtle">Dept average</span>
+                    <span className="text-[10px] font-bold text-violet-600 dark:text-violet-300">
+                      1.5× limit
+                    </span>
+                  </div>
+                  <span className="num text-sm font-bold text-ink">
+                    ₹{(selectedInvoice.departmentAverage || 50000).toLocaleString()}
+                  </span>
+                  <span className="num block text-[10px] text-ink-subtle">
+                    Threshold ₹{((selectedInvoice.departmentAverage || 50000) * 1.5).toLocaleString()}
+                    {selectedInvoice.surplusExpenseFlag && (
+                      <strong className="ml-1 font-bold text-violet-600 dark:text-violet-300">
+                        violated
+                      </strong>
+                    )}
+                  </span>
+                </div>
+
+                <div className="rounded-xl border border-line bg-surface p-2.5">
+                  <div className="flex items-center justify-between">
+                    <span className="text-[10px] font-medium text-ink-subtle">Vendor average</span>
+                    <span className="text-[10px] font-bold text-pink-600 dark:text-pink-300">
+                      2× limit
+                    </span>
+                  </div>
+                  <span className="num text-sm font-bold text-ink">
+                    ₹
+                    {(
+                      selectedInvoice.vendorAverage ||
+                      selectedInvoice.departmentAverage ||
+                      50000
+                    ).toLocaleString()}
+                  </span>
+                  <span className="num block text-[10px] text-ink-subtle">
+                    Threshold ₹
+                    {(
+                      (selectedInvoice.vendorAverage ||
+                        selectedInvoice.departmentAverage ||
+                        50000) * 2
+                    ).toLocaleString()}
+                    {selectedInvoice.vendorSurplusFlag && (
+                      <strong className="ml-1 font-bold text-pink-600 dark:text-pink-300">
+                        violated
+                      </strong>
+                    )}
+                  </span>
                 </div>
               </div>
+            </section>
 
-              {/* Risk Factors Identified */}
-              <div>
-                <h4 className="text-xs font-bold uppercase tracking-wider text-[#192837] mb-2 flex items-center gap-1.5">
-                  <Cpu size={14} className="text-[#7342E2]" />
-                  <span>Key Risk Factors</span>
+            <section className="rounded-2xl border border-warning/30 bg-warning/[0.06] p-4">
+              <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
+                <span className="inline-flex items-center gap-1.5 text-xs font-bold text-ink">
+                  <Sliders size={14} className="text-accent" />
+                  YAML policy engine · SpEL rules
+                </span>
+                <Badge tone="warning" size="sm">
+                  Action {selectedInvoice.policyAction || "ALLOW"}
+                </Badge>
+              </div>
+
+              {selectedInvoice.triggeredPolicies && selectedInvoice.triggeredPolicies.length > 0 ? (
+                <div className="space-y-1.5">
+                  <span className="block text-[11px] font-medium text-ink-muted">Matched rules</span>
+                  <div className="flex flex-wrap gap-1.5">
+                    {selectedInvoice.triggeredPolicies.map((policy, index) => (
+                      <code
+                        key={index}
+                        className="rounded-md border border-warning/30 bg-warning/15 px-2 py-0.5 font-mono text-[11px] font-bold text-warning"
+                      >
+                        {policy}
+                      </code>
+                    ))}
+                  </div>
+                </div>
+              ) : (
+                <p className="text-[11px] font-medium text-success">
+                  No policy triggers violated — standard straight-through authorisation.
+                </p>
+              )}
+            </section>
+
+            <section className="rounded-2xl border border-accent/25 bg-gradient-to-br from-accent/10 via-accent/[0.04] to-transparent p-4">
+              <div className="mb-1.5 flex flex-wrap items-center justify-between gap-2">
+                <span className="inline-flex items-center gap-1.5 text-[11px] font-bold uppercase tracking-wide text-accent">
+                  <Sparkles size={15} />
+                  AI advisory explanation
+                </span>
+                <Badge tone="accent" size="sm">
+                  Non-overriding
+                </Badge>
+              </div>
+              <p className="text-xs leading-relaxed text-ink">
+                {selectedInvoice.llmExplanation ||
+                  selectedInvoice.mlExplanation ||
+                  "Evaluated via the enterprise ML ensemble and deterministic policy rules."}
+              </p>
+              <div className="mt-2 flex flex-wrap items-center justify-between gap-2 border-t border-accent/15 pt-2 text-[10px] text-ink-subtle">
+                <span>Gemini / GPT-4o with deterministic rule fallback</span>
+                <span className="font-semibold text-success">Decision authority intact</span>
+              </div>
+            </section>
+
+            {/* Local Risk Attribution Waterfall (Additive Breakdown) */}
+            <section className="rounded-2xl border border-line bg-surface-2 p-4">
+              <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
+                <span className="inline-flex items-center gap-1.5 text-xs font-bold text-ink">
+                  <Layers size={14} className="text-accent" />
+                  Local Risk Attribution Waterfall (Additive Breakdown)
+                </span>
+                <span className="rounded-md border border-line bg-surface px-2 py-0.5 font-mono text-[11px] font-bold text-ink">
+                  Evaluated: {selectedInvoice.riskScore || 0} / 10
+                </span>
+              </div>
+              <div className="space-y-2">
+                {(selectedInvoice.riskWaterfall && selectedInvoice.riskWaterfall.length > 0
+                  ? selectedInvoice.riskWaterfall
+                  : [
+                      {
+                        factor: "Baseline Enterprise Risk",
+                        delta: 0.5,
+                        impact: "+0.5",
+                        type: "base",
+                        description: "Standard baseline risk probability across normal transactions",
+                      },
+                      ...(selectedInvoice.duplicateFlag
+                        ? [
+                            {
+                              factor: "Duplicate Invoice Match",
+                              delta: 4.0,
+                              impact: "+4.0",
+                              type: "critical",
+                              description: "Exact vendor & invoice number hash match previously processed",
+                            },
+                          ]
+                        : []),
+                      ...(selectedInvoice.surplusExpenseFlag || selectedInvoice.vendorSurplusFlag
+                        ? [
+                            {
+                              factor: "Expenditure Baseline Surplus",
+                              delta: 2.0,
+                              impact: "+2.0",
+                              type: "risk",
+                              description: "Invoice amount exceeds 1.5x departmental or 2.0x vendor average",
+                            },
+                          ]
+                        : []),
+                      ...(selectedInvoice.amount >= 100000
+                        ? [
+                            {
+                              factor: "Capital Expenditure Tier",
+                              delta: 1.5,
+                              impact: "+1.5",
+                              type: "warning",
+                              description: "High-value capital transaction exceeds departmental median",
+                            },
+                          ]
+                        : []),
+                      ...(selectedInvoice.anomalyFlag
+                        ? [
+                            {
+                              factor: "Isolation Forest Structural Outlier",
+                              delta: 1.5,
+                              impact: "+1.5",
+                              type: "anomaly",
+                              description: "Multi-dimensional feature vector falls outside normal baseline cluster",
+                            },
+                          ]
+                        : []),
+                    ]
+                ).map((item, idx) => (
+                  <div
+                    key={idx}
+                    className="flex items-center justify-between rounded-xl border border-line bg-surface p-2.5 text-xs"
+                  >
+                    <div className="space-y-0.5">
+                      <span className="font-semibold text-ink">{item.factor}</span>
+                      <p className="text-[11px] text-ink-subtle">{item.description}</p>
+                    </div>
+                    <span
+                      className={`num rounded-md px-2 py-0.5 font-mono text-xs font-bold ${
+                        item.type === "critical"
+                          ? "border border-danger/30 bg-danger/15 text-danger"
+                          : item.type === "risk"
+                          ? "border border-warning/30 bg-warning/15 text-warning"
+                          : item.type === "anomaly"
+                          ? "border border-purple-500/30 bg-purple-500/15 text-purple-600 dark:text-purple-400"
+                          : "border border-line bg-surface-2 text-ink-muted"
+                      }`}
+                    >
+                      {item.impact || `+${item.delta}`}
+                    </span>
+                  </div>
+                ))}
+              </div>
+            </section>
+
+            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+              <section>
+                <h4 className="mb-2 inline-flex items-center gap-1.5 text-[11px] font-bold uppercase tracking-wider text-ink">
+                  <Cpu size={14} className="text-accent" />
+                  Key risk factors
                 </h4>
                 <div className="space-y-1.5">
                   {selectedInvoice.riskReasons && selectedInvoice.riskReasons.length > 0 ? (
-                    selectedInvoice.riskReasons.map((reason, idx) => (
+                    selectedInvoice.riskReasons.map((reason, index) => (
                       <div
-                        key={idx}
-                        className="p-3 rounded-xl bg-amber-50/60 border border-amber-200/60 text-xs text-amber-950 font-medium flex items-start gap-2"
+                        key={index}
+                        className="flex items-start gap-2 rounded-xl border border-warning/25 bg-warning/[0.06] p-2.5 text-xs font-medium text-ink"
                       >
-                        <span className="w-1.5 h-1.5 rounded-full bg-amber-500 mt-1.5 flex-shrink-0" />
-                        <span>{reason}</span>
+                        <span className="mt-1.5 h-1.5 w-1.5 shrink-0 rounded-full bg-warning" />
+                        <span className="leading-relaxed">{reason}</span>
                       </div>
                     ))
                   ) : (
-                    <p className="text-xs text-[#192837]/50 italic">
-                      No adverse risk factors identified.
-                    </p>
+                    <p className="text-xs italic text-ink-subtle">No adverse risk factors identified.</p>
                   )}
                 </div>
-              </div>
+              </section>
 
-              {/* Actionable Recommendations */}
-              <div>
-                <h4 className="text-xs font-bold uppercase tracking-wider text-[#192837] mb-2 flex items-center gap-1.5">
-                  <Layers size={14} className="text-[#7342E2]" />
-                  <span>Recommended Next Steps</span>
+              <section>
+                <h4 className="mb-2 inline-flex items-center gap-1.5 text-[11px] font-bold uppercase tracking-wider text-ink">
+                  <Layers size={14} className="text-accent" />
+                  Recommended next steps
                 </h4>
                 <div className="space-y-1.5">
-                  {selectedInvoice.riskRecommendations && selectedInvoice.riskRecommendations.length > 0 ? (
-                    selectedInvoice.riskRecommendations.map((rec, idx) => (
+                  {selectedInvoice.riskRecommendations &&
+                  selectedInvoice.riskRecommendations.length > 0 ? (
+                    selectedInvoice.riskRecommendations.map((recommendation, index) => (
                       <div
-                        key={idx}
-                        className="p-3 rounded-xl bg-[#F5F5F3] border border-[#192837]/8 text-xs text-[#192837] font-medium flex items-start gap-2"
+                        key={index}
+                        className="flex items-start gap-2 rounded-xl border border-line bg-surface-2 p-2.5 text-xs font-medium text-ink"
                       >
-                        <span className="w-1.5 h-1.5 rounded-full bg-[#7342E2] mt-1.5 flex-shrink-0" />
-                        <span>{rec}</span>
+                        <span className="mt-1.5 h-1.5 w-1.5 shrink-0 rounded-full bg-accent" />
+                        <span className="leading-relaxed">{recommendation}</span>
                       </div>
                     ))
                   ) : (
-                    <p className="text-xs text-[#192837]/50 italic">
-                      Standard straight-through processing.
-                    </p>
+                    <p className="text-xs italic text-ink-subtle">Standard straight-through processing.</p>
                   )}
                 </div>
-              </div>
-
-              {/* Model Tag */}
-              <div className="pt-2 border-t border-[#192837]/8 flex items-center justify-between text-[11px] text-[#192837]/50 font-mono">
-                <span>Active Model: {selectedInvoice.modelVersion || "v3.0-MultiModel"}</span>
-                <span>Amount: ₹{selectedInvoice.amount?.toLocaleString()}</span>
-              </div>
+              </section>
             </div>
 
-            {/* Modal Footer Actions */}
-            <div className="sticky bottom-0 bg-[#F5F5F3]/95 backdrop-blur px-6 py-4 border-t border-[#192837]/8 flex items-center justify-between z-10">
-              <span className="text-xs font-medium text-[#192837]/60">
-                Status: <strong className="text-[#192837]">{selectedInvoice.status}</strong>
-              </span>
-
-              <div className="flex items-center gap-2">
-                {selectedInvoice.status !== "APPROVED" && selectedInvoice.status !== "REJECTED" && (
-                  <>
-                    <button
-                      type="button"
-                      onClick={() => {
-                        handleStatusChange(selectedInvoice, "REJECTED");
-                        setSelectedInvoice(null);
-                      }}
-                      className="px-4 py-2 rounded-xl text-xs font-semibold bg-red-50 text-red-600 hover:bg-red-100 border border-red-200 transition-colors cursor-pointer"
-                    >
-                      Reject Invoice
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => {
-                        handleStatusChange(selectedInvoice, "APPROVED");
-                        setSelectedInvoice(null);
-                      }}
-                      className="px-4 py-2 rounded-xl text-xs font-semibold bg-emerald-600 text-white hover:bg-emerald-700 shadow-md shadow-emerald-600/20 transition-colors cursor-pointer"
-                    >
-                      Approve Invoice
-                    </button>
-                  </>
-                )}
-                <button
-                  type="button"
-                  onClick={() => setSelectedInvoice(null)}
-                  className="px-4 py-2 rounded-xl text-xs font-semibold bg-white border border-[#192837]/10 text-[#192837] hover:bg-[#192837]/5 transition-colors cursor-pointer"
-                >
-                  Close
-                </button>
-              </div>
+            <div className="flex flex-wrap items-center justify-between gap-2 border-t border-line pt-3 font-mono text-[10px] text-ink-subtle">
+              <span>Model {selectedInvoice.modelVersion || "v3.0-MultiModel"}</span>
+              <span className="num">Amount ₹{selectedInvoice.amount?.toLocaleString()}</span>
             </div>
           </div>
-        </div>
+        )}
+      </Modal>
+
+      {/* Failure state when the very first load never resolved */}
+      {!pageLoading && !error && invoices.length === 0 && (
+        <p className="flex items-center gap-1.5 text-2xs text-ink-subtle">
+          <AlertCircle size={12} />
+          No invoices yet — submit the first one above to exercise the risk engine.
+        </p>
       )}
     </div>
   );

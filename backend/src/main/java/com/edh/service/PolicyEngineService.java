@@ -156,7 +156,25 @@ public class PolicyEngineService {
         }
     }
 
-    public PolicyEvaluationResult evaluate(
+    public List<DecisionPolicy> parsePoliciesFromYaml(String yamlContent) throws Exception {
+        List<DecisionPolicy> list = new ArrayList<>();
+        JsonNode rootNode = yamlMapper.readTree(yamlContent);
+        if (rootNode != null && rootNode.has("policies")) {
+            for (JsonNode node : rootNode.get("policies")) {
+                DecisionPolicy policy = new DecisionPolicy();
+                policy.setName(node.has("name") ? node.get("name").asText() : "");
+                policy.setCondition(node.has("condition") ? node.get("condition").asText() : "");
+                policy.setAction(node.has("action") ? node.get("action").asText() : "FLAG_FOR_REVIEW");
+                policy.setRiskScore(node.has("risk_score") ? node.get("risk_score").asInt() : 5);
+                policy.setRecommendation(node.has("recommendation") ? node.get("recommendation").asText() : "");
+                list.add(policy);
+            }
+        }
+        return list;
+    }
+
+    public PolicyEvaluationResult evaluateWithPolicies(
+            List<DecisionPolicy> policyList,
             Invoice invoice,
             double confidence,
             double predictedSpend,
@@ -167,11 +185,7 @@ public class PolicyEngineService {
         PolicyEvaluationResult result = new PolicyEvaluationResult();
         StandardEvaluationContext context = new StandardEvaluationContext();
 
-        // Bind variables for SpEL expressions matching YAML conditions:
-        // duplicate_invoice:  confidence > 0.85
-        // budget_overspend:   predicted_spend > budget * 1.1
-        // vendor_risk:        risk_score > 7
-        // surplus_expense:    expense > average * 1.5
+        // Bind variables for SpEL expressions matching YAML conditions
         context.setVariable("confidence", Double.valueOf(confidence));
         context.setVariable("predicted_spend", Double.valueOf(predictedSpend));
         context.setVariable("budget", Double.valueOf(budget > 0 ? budget : 100000.0));
@@ -181,15 +195,13 @@ public class PolicyEngineService {
         context.setVariable("is_duplicate", Boolean.valueOf(invoice != null && invoice.isDuplicateFlag()));
         context.setVariable("department", invoice != null && invoice.getDepartment() != null ? invoice.getDepartment() : "General");
 
-        for (DecisionPolicy policy : policies) {
+        for (DecisionPolicy policy : policyList) {
             String condition = policy.getCondition();
             if (condition == null || condition.isBlank()) {
                 continue;
             }
 
             try {
-                // SpEL parser handles standard syntax: confidence > 0.85, predicted_spend > budget * 1.1
-                // Replace bare variable identifiers with #var syntax required by SpEL
                 String spelExpr = condition
                         .replaceAll("\\bconfidence\\b", "#confidence")
                         .replaceAll("\\bpredicted_spend\\b", "#predicted_spend")
@@ -215,5 +227,15 @@ public class PolicyEngineService {
         }
 
         return result;
+    }
+
+    public PolicyEvaluationResult evaluate(
+            Invoice invoice,
+            double confidence,
+            double predictedSpend,
+            double budget,
+            int vendorRiskScore,
+            double deptAverage) {
+        return evaluateWithPolicies(policies, invoice, confidence, predictedSpend, budget, vendorRiskScore, deptAverage);
     }
 }
