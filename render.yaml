@@ -9,6 +9,8 @@ services:
     region: oregon
     healthCheckPath: /health
     envVars:
+      - key: PORT
+        value: 8000
       - key: ML_INTERNAL_API_KEY
         value: edh_internal_ml_key_8f92b7c4a1e9
 
@@ -22,6 +24,10 @@ services:
     region: oregon
     healthCheckPath: /actuator/health
     envVars:
+      - key: PORT
+        value: 8080
+      - key: SERVER_PORT
+        value: 8080
       - key: SPRING_DATA_MONGODB_URI
         sync: false
       - key: ML_SERVICE_URL

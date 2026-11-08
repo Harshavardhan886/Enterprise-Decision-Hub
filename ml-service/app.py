@@ -224,7 +224,8 @@ def compute_waterfall_attribution(amount: float, is_duplicate: int, overspend_pc
 
 # ─── Endpoints ────────────────────────────────────────────────────────────────
 
-@app.get("/")
+@app.api_route("/", methods=["GET", "HEAD"])
+@app.api_route("/health", methods=["GET", "HEAD"])
 def health():
     """Public health check endpoint for orchestrators (Docker / K8s)."""
     return {
