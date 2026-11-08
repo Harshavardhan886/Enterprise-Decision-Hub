@@ -1,0 +1,65 @@
+{
+  "model_version": "v3.0-MultiModel",
+  "last_trained": "2026-09-26T09:16:12.089573",
+  "mlflow_run_id": "a55480e776254b8c95ce8b9a0ed3eca6",
+  "total_samples": 6000,
+  "test_samples": 1200,
+  "features": [
+    "amount",
+    "is_duplicate",
+    "overspend_percentage",
+    "vendor_risk_encoded"
+  ],
+  "models": {
+    "random_forest": {
+      "role": "Primary Risk Classifier",
+      "type": "RandomForestClassifier",
+      "metrics": {
+        "accuracy": 0.9475,
+        "precision": 0.7545,
+        "recall": 0.9548,
+        "f1_score": 0.8429,
+        "roc_auc": 0.9908
+      },
+      "feature_importances": {
+        "amount": 0.2465,
+        "is_duplicate": 0.4362,
+        "overspend_percentage": 0.0567,
+        "vendor_risk_encoded": 0.2606
+      }
+    },
+    "xgboost": {
+      "role": "Secondary Risk Classifier",
+      "type": "XGBClassifier",
+      "metrics": {
+        "accuracy": 0.9692,
+        "precision": 0.8933,
+        "recall": 0.8983,
+        "f1_score": 0.8958,
+        "roc_auc": 0.9914
+      },
+      "feature_importances": {
+        "amount": 0.0525,
+        "is_duplicate": 0.7291,
+        "overspend_percentage": 0.0198,
+        "vendor_risk_encoded": 0.1987
+      }
+    },
+    "isolation_forest": {
+      "role": "Structural Anomaly Detector",
+      "type": "IsolationForest",
+      "contamination_rate": 0.06,
+      "n_estimators": 120,
+      "feature_importances": {
+        "amount": 0.35,
+        "is_duplicate": 0.25,
+        "overspend_percentage": 0.3,
+        "vendor_risk_encoded": 0.1
+      }
+    }
+  },
+  "ensemble_weights": {
+    "random_forest": 0.55,
+    "xgboost": 0.45
+  }
+}
